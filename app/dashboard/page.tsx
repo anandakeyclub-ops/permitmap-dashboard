@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useUser } from '@clerk/nextjs';
+import { useUser, useAuth } from '@clerk/nextjs';
+import { apiFetch } from '../../lib/api';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
@@ -10,7 +11,7 @@ import {
   ChevronRight, Star, AlertCircle, Lock
 } from 'lucide-react';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'https://permitmap-api.onrender.com';
+// API base + auth lives in lib/api.ts (apiFetch attaches the Clerk JWT when available).
 
 // Tier limits
 const TIER_LIMITS: Record<string, { counties: number; permits: number; label: string }> = {
@@ -34,6 +35,7 @@ const SCORE_COLOR = (s: number) =>
 
 export default function Dashboard() {
   const { user } = useUser();
+  const { getToken } = useAuth();
   const tier = (user?.publicMetadata?.tier as string) || 'starter';
   const limits = TIER_LIMITS[tier] || TIER_LIMITS.starter;
 
@@ -47,24 +49,24 @@ export default function Dashboard() {
 
   // Load counties
   useEffect(() => {
-    fetch(`${API}/counties`)
+    apiFetch('/counties', getToken)
       .then(r => r.json())
       .then(d => setCounties(d.counties || []))
       .catch(() => {});
-  }, []);
+  }, [getToken]);
 
   // Load summary + permits when county changes
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      fetch(`${API}/summary?county=${county}`).then(r => r.json()),
-      fetch(`${API}/permits?county=${county}&limit=${limits.permits}`).then(r => r.json()),
+      apiFetch(`/summary?county=${county}`, getToken).then(r => r.json()),
+      apiFetch(`/permits?county=${county}&limit=${limits.permits}`, getToken).then(r => r.json()),
     ]).then(([s, p]) => {
       setSummary(s);
       setPermits(p.permits || []);
       setLoading(false);
     }).catch(() => setLoading(false));
-  }, [county, limits.permits]);
+  }, [county, limits.permits, getToken]);
 
   const filteredPermits = tradeFilter
     ? permits.filter(p => p.trade === tradeFilter)
