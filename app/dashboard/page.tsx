@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { apiFetch } from '../../lib/api';
+import CallList from './_components/CallList';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
@@ -99,8 +100,9 @@ export default function Dashboard() {
   const [county, setCounty]         = useState('palm_beach');
   const [summary, setSummary]       = useState<any>(null);
   const [permits, setPermits]       = useState<any[]>([]);
+  const [scored, setScored]         = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
-  const [activeTab, setActiveTab]   = useState<'permits' | 'trends' | 'insights'>('permits');
+  const [activeTab, setActiveTab]   = useState<'opportunities' | 'permits' | 'trends' | 'insights'>('opportunities');
   const [tradeFilter, setTradeFilter] = useState('');
 
   // Load counties
@@ -117,9 +119,14 @@ export default function Dashboard() {
     Promise.all([
       apiFetch(`/summary?county=${county}`, getToken).then(r => r.json()),
       apiFetch(`/permits?county=${county}&limit=${limits.permits}`, getToken).then(r => r.json()),
-    ]).then(([s, p]) => {
+      // Phase A: ranked opportunities. 403 for preview/no-tier -> empty (the tab shows PreviewLock).
+      apiFetch(`/permits/scored?county=${county}&top_n=50`, getToken)
+        .then(r => (r.ok ? r.json() : { permits: [] }))
+        .catch(() => ({ permits: [] })),
+    ]).then(([s, p, sc]) => {
       setSummary(s);
       setPermits(p.permits || []);
+      setScored(sc.permits || []);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [county, limits.permits, getToken]);
@@ -327,7 +334,7 @@ export default function Dashboard() {
               {/* Tabs */}
               <div style={{ display: 'flex', gap: 4, marginBottom: 20,
                 borderBottom: '1px solid #1e293b', paddingBottom: 0 }}>
-                {(['permits', 'trends', 'insights'] as const).map(tab => (
+                {(['opportunities', 'permits', 'trends', 'insights'] as const).map(tab => (
                   <button key={tab} onClick={() => setActiveTab(tab)} style={{
                     padding: '8px 18px', background: 'none', border: 'none',
                     cursor: 'pointer', fontSize: 13, fontWeight: 600,
@@ -337,6 +344,17 @@ export default function Dashboard() {
                   }}>{tab}</button>
                 ))}
               </div>
+
+              {/* OPPORTUNITIES TAB (Phase A) — the default post-login view */}
+              {activeTab === 'opportunities' && isPreview && (
+                <PreviewLock compact />
+              )}
+              {activeTab === 'opportunities' && !isPreview && (
+                <CallList
+                  scored={scored}
+                  topZips={(summary?.targeting?.top_zips || []).map((z: any) => String(z.zip))}
+                />
+              )}
 
               {/* PERMITS TAB */}
               {activeTab === 'permits' && isPreview && (
