@@ -33,6 +33,62 @@ const TRADE_COLORS: Record<string, string> = {
 const SCORE_COLOR = (s: number) =>
   s >= 80 ? '#22c55e' : s >= 60 ? '#f97316' : s >= 40 ? '#eab308' : '#6b7280';
 
+// Trial-enabled Stripe checkout links ($0 due today, 14-day trial).
+const CHECKOUT = {
+  starter: 'https://buy.stripe.com/14AeVddOnbPx1g23VIdUY04',
+  pro:     'https://buy.stripe.com/3cI7sLfWv2eXaQC9g2dUY05',
+  team:    'https://buy.stripe.com/aFa00jeSraLtgaW4ZMdUY06',
+};
+
+// Phase 1.5: shown to authenticated users with no paid tier (preview entitlement).
+// The API returns counts only (preview_locked=true) and zero permit rows, so we
+// never render addresses/owners — we render the upgrade path instead.
+function PreviewLock({ compact = false }: { compact?: boolean }) {
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, #1e3a5f 0%, #0d1529 100%)',
+      border: '1px solid #f59e0b40',
+      borderRadius: 12,
+      padding: compact ? '24px 28px' : '32px 36px',
+      textAlign: 'center',
+      marginBottom: 28,
+    }}>
+      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 48, height: 48, borderRadius: '50%', background: '#f59e0b20',
+        border: '2px solid #f59e0b', marginBottom: 14 }}>
+        <Lock size={22} color="#f59e0b" />
+      </div>
+      <h3 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 700, color: '#f1f5f9' }}>
+        Preview mode
+      </h3>
+      <p style={{ margin: '0 auto 20px', fontSize: 14, color: '#cbd5e1',
+        maxWidth: 520, lineHeight: 1.6 }}>
+        Start your 14-day trial to unlock permit addresses, owners, saved leads,
+        and scored opportunities.
+      </p>
+      <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+        <a href={CHECKOUT.starter} style={{
+          background: '#2563eb', color: '#fff', fontSize: 13, fontWeight: 700,
+          padding: '10px 22px', borderRadius: 8, textDecoration: 'none' }}>
+          Start Starter trial →
+        </a>
+        <a href={CHECKOUT.pro} style={{
+          background: 'transparent', color: '#93c5fd', fontSize: 13, fontWeight: 600,
+          padding: '10px 18px', borderRadius: 8, textDecoration: 'none',
+          border: '1px solid #2563eb60' }}>
+          Pro
+        </a>
+        <a href={CHECKOUT.team} style={{
+          background: 'transparent', color: '#93c5fd', fontSize: 13, fontWeight: 600,
+          padding: '10px 18px', borderRadius: 8, textDecoration: 'none',
+          border: '1px solid #2563eb60' }}>
+          Team
+        </a>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { user } = useUser();
   const { getToken } = useAuth();
@@ -67,6 +123,10 @@ export default function Dashboard() {
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [county, limits.permits, getToken]);
+
+  // Phase 1.5: the API is authoritative — a preview (unpaid) caller gets
+  // preview_locked=true and zero rows. Never trust client metadata for gating.
+  const isPreview = summary?.preview_locked === true;
 
   const filteredPermits = tradeFilter
     ? permits.filter(p => p.trade === tradeFilter)
@@ -239,6 +299,9 @@ export default function Dashboard() {
                 ))}
               </div>
 
+              {/* Phase 1.5: preview users see KPI counts above + locked upgrade path here */}
+              {isPreview && <PreviewLock />}
+
               {/* Smart targeting */}
               {summary.targeting?.recommendation && (
                 <div style={{
@@ -276,7 +339,10 @@ export default function Dashboard() {
               </div>
 
               {/* PERMITS TAB */}
-              {activeTab === 'permits' && (
+              {activeTab === 'permits' && isPreview && (
+                <PreviewLock compact />
+              )}
+              {activeTab === 'permits' && !isPreview && (
                 <>
                   {/* Trade filter */}
                   <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -436,7 +502,10 @@ export default function Dashboard() {
               )}
 
               {/* INSIGHTS TAB */}
-              {activeTab === 'insights' && (
+              {activeTab === 'insights' && isPreview && (
+                <PreviewLock compact />
+              )}
+              {activeTab === 'insights' && !isPreview && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {summary.insights?.map((insight: string, i: number) => (
                     <div key={i} style={{
