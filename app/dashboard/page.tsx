@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { apiFetch } from '../../lib/api';
 import CallList from './_components/CallList';
+import DigestCard from './_components/DigestCard';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
@@ -101,6 +102,7 @@ export default function Dashboard() {
   const [summary, setSummary]       = useState<any>(null);
   const [permits, setPermits]       = useState<any[]>([]);
   const [scored, setScored]         = useState<any[]>([]);
+  const [digest, setDigest]         = useState<any>(null);
   const [loading, setLoading]       = useState(true);
   const [activeTab, setActiveTab]   = useState<'opportunities' | 'permits' | 'trends' | 'insights'>('opportunities');
   const [tradeFilter, setTradeFilter] = useState('');
@@ -123,13 +125,26 @@ export default function Dashboard() {
       apiFetch(`/permits/scored?county=${county}&top_n=50`, getToken)
         .then(r => (r.ok ? r.json() : { permits: [] }))
         .catch(() => ({ permits: [] })),
-    ]).then(([s, p, sc]) => {
+      // Phase B: weekly digest briefing. 403 for preview/no-tier -> null (card hidden).
+      apiFetch(`/digest?county=${county}`, getToken)
+        .then(r => (r.ok ? r.json() : null))
+        .catch(() => null),
+    ]).then(([s, p, sc, dg]) => {
       setSummary(s);
       setPermits(p.permits || []);
       setScored(sc.permits || []);
+      setDigest(dg);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [county, limits.permits, getToken]);
+
+  // Phase B: digest CTA -> switch to the Opportunity Queue and scroll it into view.
+  const goToQueue = () => {
+    setActiveTab('opportunities');
+    setTimeout(() => {
+      document.getElementById('opportunities-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+  };
 
   // Phase 1.5: the API is authoritative — a preview (unpaid) caller gets
   // preview_locked=true and zero rows. Never trust client metadata for gating.
@@ -279,6 +294,12 @@ export default function Dashboard() {
                 </p>
               </div>
 
+              {/* Phase B: Weekly Digest Card — 60-second briefing, above the Opportunity Queue.
+                  Paid/trial only (digest 403 for preview -> digest stays null -> card hidden). */}
+              {!isPreview && digest && (
+                <DigestCard digest={digest} label={summary.label} county={county} onView={goToQueue} />
+              )}
+
               {/* KPI Cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
                 gap: 16, marginBottom: 28 }}>
@@ -350,10 +371,12 @@ export default function Dashboard() {
                 <PreviewLock compact />
               )}
               {activeTab === 'opportunities' && !isPreview && (
-                <CallList
-                  scored={scored}
-                  topZips={(summary?.targeting?.top_zips || []).map((z: any) => String(z.zip))}
-                />
+                <div id="opportunities-anchor">
+                  <CallList
+                    scored={scored}
+                    topZips={(summary?.targeting?.top_zips || []).map((z: any) => String(z.zip))}
+                  />
+                </div>
               )}
 
               {/* PERMITS TAB */}
