@@ -1,5 +1,7 @@
 'use client';
 
+import { TRIAL_LINKS } from '../../lib/checkout';
+
 export default function Pricing() {
   const tiers = [
     {
@@ -16,7 +18,7 @@ export default function Pricing() {
         'Weekly insights',
       ],
       cta: 'Get Started',
-      href: 'https://buy.stripe.com/14AeVddOnbPx1g23VIdUY04',
+      href: TRIAL_LINKS.starter,
       highlight: false,
     },
     {
@@ -33,7 +35,7 @@ export default function Pricing() {
         'Priority support',
       ],
       cta: 'Go Pro',
-      href: 'https://buy.stripe.com/3cI7sLfWv2eXaQC9g2dUY05',
+      href: TRIAL_LINKS.pro,
       highlight: true,
     },
     {
@@ -50,7 +52,7 @@ export default function Pricing() {
         'Priority support',
       ],
       cta: 'Start Team Plan',
-      href: 'https://buy.stripe.com/aFa00jeSraLtgaW4ZMdUY06',
+      href: TRIAL_LINKS.team,
       highlight: false,
     },
   ];

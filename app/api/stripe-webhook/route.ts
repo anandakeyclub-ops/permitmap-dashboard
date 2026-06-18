@@ -16,6 +16,23 @@ const TIER_COUNTIES: Record<string, number> = {
   starter: 1, pro: 5, team: 99,
 };
 
+// First-party funnel: emit server-truth events to permitmap-api (Supabase).
+// Best-effort — analytics must NEVER fail the webhook.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://permitmap-api.onrender.com';
+async function emitEvent(event_name: string, props: Record<string, any>) {
+  const key = process.env.ANALYTICS_INGEST_KEY;
+  if (!key) { console.warn('ANALYTICS_INGEST_KEY unset — skipping analytics emit'); return; }
+  try {
+    await fetch(`${API_BASE}/analytics/event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Analytics-Key': key },
+      body: JSON.stringify({ event_name, ...props }),
+    });
+  } catch (e) {
+    console.error('analytics emit failed:', e);
+  }
+}
+
 async function getEmailFromCustomer(customerId: string): Promise<string | null> {
   try {
     const customer = await stripe.customers.retrieve(customerId);
@@ -73,6 +90,37 @@ export async function POST(req: NextRequest) {
         const price = sub.items.data[0]?.price?.id;
         const tier  = PRICE_TO_TIER[price] || 'starter';
         await upsertClerkUser(email, tier, custId, subId);
+
+        // trial_started — trial-link checkouts complete with the subscription in
+        // `trialing`. county/user are backfilled API-side from stripe_checkout_started
+        // via client_reference_id. Deduped per subscription.
+        await emitEvent('trial_started', {
+          client_reference_id: session.client_reference_id || undefined,
+          stripe_session_id: session.id,
+          stripe_subscription_id: subId,
+          email,
+          plan: tier,
+          properties: { customer_id: custId, subscription_status: sub.status },
+        });
+      }
+    }
+
+    // Paid conversion — first non-zero invoice after the trial. amount_paid>0
+    // distinguishes a real charge from the $0 trial-start invoice. Deduped per sub;
+    // county/user backfilled API-side from the trial_started row.
+    if (event.type === 'invoice.payment_succeeded') {
+      const inv = event.data.object as Stripe.Invoice;
+      const subId = inv.subscription as string;
+      if ((inv.amount_paid || 0) > 0 && subId) {
+        const sub   = await stripe.subscriptions.retrieve(subId);
+        const price = sub.items.data[0]?.price?.id;
+        const tier  = PRICE_TO_TIER[price] || 'starter';
+        await emitEvent('paid_subscription_started', {
+          stripe_subscription_id: subId,
+          email: inv.customer_email || undefined,
+          plan: tier,
+          properties: { invoice_id: inv.id, amount_paid: inv.amount_paid },
+        });
       }
     }
 

@@ -5,6 +5,9 @@ import { useUser, useAuth } from '@clerk/nextjs';
 import { apiFetch } from '../../lib/api';
 import CallList from './_components/CallList';
 import DigestCard from './_components/DigestCard';
+import UpgradeModal from './_components/UpgradeModal';
+import { track } from '../../lib/analytics';
+import { TRIAL_LINKS } from '../../lib/checkout';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
@@ -35,12 +38,8 @@ const TRADE_COLORS: Record<string, string> = {
 const SCORE_COLOR = (s: number) =>
   s >= 80 ? '#22c55e' : s >= 60 ? '#f97316' : s >= 40 ? '#eab308' : '#6b7280';
 
-// Trial-enabled Stripe checkout links ($0 due today, 14-day trial).
-const CHECKOUT = {
-  starter: 'https://buy.stripe.com/14AeVddOnbPx1g23VIdUY04',
-  pro:     'https://buy.stripe.com/3cI7sLfWv2eXaQC9g2dUY05',
-  team:    'https://buy.stripe.com/aFa00jeSraLtgaW4ZMdUY06',
-};
+// Trial-enabled Stripe checkout links — single source of truth in lib/checkout.ts.
+const CHECKOUT = TRIAL_LINKS;
 
 // Phase 1.5: shown to authenticated users with no paid tier (preview entitlement).
 // The API returns counts only (preview_locked=true) and zero permit rows, so we
@@ -106,6 +105,14 @@ export default function Dashboard() {
   const [loading, setLoading]       = useState(true);
   const [activeTab, setActiveTab]   = useState<'opportunities' | 'permits' | 'trends' | 'insights'>('opportunities');
   const [tradeFilter, setTradeFilter] = useState('');
+  const [upgradeCounty, setUpgradeCounty] = useState<any | null>(null);
+
+  // Locked county click → record the lock view and open the upgrade modal
+  // (instead of silently doing nothing). The modal fires upgrade_modal_open itself.
+  const openUpgrade = (c: any) => {
+    track(getToken, 'locked_county_view', { county: c.key, source: 'county_sidebar' });
+    setUpgradeCounty(c);
+  };
 
   // Load counties
   useEffect(() => {
@@ -238,11 +245,11 @@ export default function Dashboard() {
             const locked = isLocked(i);
             const active = c.key === county;
             return (
-              <button key={c.key} onClick={() => !locked && setCounty(c.key)}
+              <button key={c.key} onClick={() => (locked ? openUpgrade(c) : setCounty(c.key))}
                 style={{
                   width: '100%', textAlign: 'left', padding: '10px 16px',
                   background: active ? '#1e3a5f' : 'transparent',
-                  border: 'none', cursor: locked ? 'not-allowed' : 'pointer',
+                  border: 'none', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   opacity: locked ? 0.4 : 1,
                   borderLeft: active ? '3px solid #3b82f6' : '3px solid transparent',
@@ -590,6 +597,19 @@ export default function Dashboard() {
           )}
         </main>
       </div>
+
+      {upgradeCounty && (
+        <UpgradeModal
+          countyKey={upgradeCounty.key}
+          countyLabel={upgradeCounty.label}
+          countyCount={upgradeCounty.count}
+          tier={tier}
+          limits={limits}
+          userId={user?.id}
+          getToken={getToken}
+          onClose={() => setUpgradeCounty(null)}
+        />
+      )}
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&display=swap');
