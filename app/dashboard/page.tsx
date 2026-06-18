@@ -5,6 +5,7 @@ import { useUser, useAuth } from '@clerk/nextjs';
 import { apiFetch } from '../../lib/api';
 import CallList from './_components/CallList';
 import DigestCard from './_components/DigestCard';
+import SavedLeads from './_components/SavedLeads';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
@@ -104,7 +105,7 @@ export default function Dashboard() {
   const [scored, setScored]         = useState<any[]>([]);
   const [digest, setDigest]         = useState<any>(null);
   const [loading, setLoading]       = useState(true);
-  const [activeTab, setActiveTab]   = useState<'opportunities' | 'permits' | 'trends' | 'insights'>('opportunities');
+  const [activeTab, setActiveTab]   = useState<'opportunities' | 'permits' | 'trends' | 'insights' | 'saved'>('opportunities');
   const [tradeFilter, setTradeFilter] = useState('');
 
   // Load counties
@@ -355,7 +356,7 @@ export default function Dashboard() {
               {/* Tabs */}
               <div style={{ display: 'flex', gap: 4, marginBottom: 20,
                 borderBottom: '1px solid #1e293b', paddingBottom: 0 }}>
-                {(['opportunities', 'permits', 'trends', 'insights'] as const).map(tab => (
+                {(['opportunities', 'permits', 'trends', 'insights', 'saved'] as const).map(tab => (
                   <button key={tab} onClick={() => setActiveTab(tab)} style={{
                     padding: '8px 18px', background: 'none', border: 'none',
                     cursor: 'pointer', fontSize: 13, fontWeight: 600,
@@ -375,6 +376,7 @@ export default function Dashboard() {
                   <CallList
                     scored={scored}
                     topZips={(summary?.targeting?.top_zips || []).map((z: any) => String(z.zip))}
+                    getToken={getToken}
                   />
                 </div>
               )}
@@ -585,6 +587,14 @@ export default function Dashboard() {
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* SAVED TAB (Phase C) — paid/trial only, same gate as the other tabs */}
+              {activeTab === 'saved' && isPreview && (
+                <PreviewLock compact />
+              )}
+              {activeTab === 'saved' && !isPreview && (
+                <SavedLeads getToken={getToken} onBrowse={() => setActiveTab('opportunities')} />
               )}
             </>
           )}
