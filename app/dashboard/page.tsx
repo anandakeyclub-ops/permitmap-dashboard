@@ -9,6 +9,7 @@ import UpgradeModal from './_components/UpgradeModal';
 import { track } from '../../lib/analytics';
 import { TRIAL_LINKS } from '../../lib/checkout';
 import SavedLeads from './_components/SavedLeads';
+import { promoteSignupCounty, dismissFirstLogin } from '../actions';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
@@ -98,7 +99,7 @@ export default function Dashboard() {
   const limits = TIER_LIMITS[tier] || TIER_LIMITS.starter;
 
   const [counties, setCounties]     = useState<any[]>([]);
-  const [county, setCounty]         = useState('palm_beach');
+  const [county, setCounty]         = useState('');  // '' until resolved (localStorage / Clerk metadata) or user picks
   const [summary, setSummary]       = useState<any>(null);
   const [permits, setPermits]       = useState<any[]>([]);
   const [scored, setScored]         = useState<any[]>([]);
@@ -109,6 +110,7 @@ export default function Dashboard() {
   const [upgrade, setUpgrade] = useState<
     { trigger: 'locked_county' | 'get_full_access_button'; county: any | null } | null
   >(null);
+  const [showWelcome, setShowWelcome] = useState(false);
 
   // Locked county click → record the lock view and open the upgrade modal
   // (instead of silently doing nothing). The modal fires upgrade_modal_open itself.
@@ -120,6 +122,18 @@ export default function Dashboard() {
   // "Get Full Access" button → open the modal generically (no specific county).
   const openFullAccess = () => setUpgrade({ trigger: 'get_full_access_button', county: null });
 
+  // Persist a county choice so the dashboard reopens to it instantly (PART D).
+  const selectCounty = (key: string) => {
+    setCounty(key);
+    try { localStorage.setItem('permitmap_county', key); } catch { /* ignore */ }
+  };
+
+  // Dismiss the first-login banner and persist it server-side (PART C).
+  const dismissWelcome = () => {
+    setShowWelcome(false);
+    dismissFirstLogin().catch(() => {});
+  };
+
   // Load counties
   useEffect(() => {
     apiFetch('/counties', getToken)
@@ -128,8 +142,33 @@ export default function Dashboard() {
       .catch(() => {});
   }, [getToken]);
 
+  // Resolve the initial county once (PART A/B): a prior choice (localStorage) wins,
+  // else the county from Clerk publicMetadata; for a brand-new signup the county was
+  // stored as unsafeMetadata at /sign-up?county= and is promoted to publicMetadata
+  // server-side here. Slugs ("palm-beach") map to API keys ("palm_beach").
+  useEffect(() => {
+    if (county) return; // already chosen this session
+    let cancelled = false;
+    (async () => {
+      let resolved = '';
+      try { resolved = localStorage.getItem('permitmap_county') || ''; } catch { /* ignore */ }
+      if (!resolved && user) {
+        const meta = (user.publicMetadata?.county as string) || '';   // returning user
+        resolved = meta || (await promoteSignupCounty().catch(() => null)) || ''; // new signup
+      }
+      if (resolved && !cancelled) setCounty(resolved.trim().toLowerCase().replace(/-/g, '_'));
+    })();
+    return () => { cancelled = true; };
+  }, [user, county]);
+
+  // First-login onboarding (PART C): shown until dismissed (publicMetadata.firstLogin === false).
+  useEffect(() => {
+    if (user) setShowWelcome(user.publicMetadata?.firstLogin !== false);
+  }, [user]);
+
   // Load summary + permits when county changes
   useEffect(() => {
+    if (!county) { setLoading(false); return; }  // nothing selected yet -> show the county picker
     setLoading(true);
     Promise.all([
       apiFetch(`/summary?county=${county}`, getToken).then(r => r.json()),
@@ -252,7 +291,7 @@ export default function Dashboard() {
             const locked = isLocked(i);
             const active = c.key === county;
             return (
-              <button key={c.key} onClick={() => (locked ? openUpgrade(c) : setCounty(c.key))}
+              <button key={c.key} onClick={() => (locked ? openUpgrade(c) : selectCounty(c.key))}
                 style={{
                   width: '100%', textAlign: 'left', padding: '10px 16px',
                   background: active ? '#1e3a5f' : 'transparent',
@@ -285,7 +324,39 @@ export default function Dashboard() {
         {/* Main content */}
         <main style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
 
-          {loading ? (
+          {!county ? (
+            /* PART B: no county resolved (no prior choice / no signup metadata) →
+               prompt the user with the county list front-and-center. */
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
+              height: '70vh', flexDirection: 'column', gap: 20, textAlign: 'center' }}>
+              <div>
+                <h1 style={{ fontSize: 24, fontWeight: 700, color: '#f1f5f9', margin: '0 0 6px' }}>
+                  Select your county to get started
+                </h1>
+                <p style={{ color: '#64748b', fontSize: 14, margin: 0 }}>
+                  Pick a county to load this week's permits — we'll remember it next time.
+                </p>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center', maxWidth: 600 }}>
+                {counties.map((c, i) => {
+                  const locked = isLocked(i);
+                  return (
+                    <button key={c.key} onClick={() => (locked ? openUpgrade(c) : selectCounty(c.key))}
+                      style={{
+                        padding: '10px 16px', borderRadius: 10, cursor: 'pointer',
+                        background: locked ? 'transparent' : '#1e3a5f',
+                        border: `1px solid ${locked ? '#1e293b' : '#2563eb'}`,
+                        color: locked ? '#475569' : '#93c5fd', fontSize: 13, fontWeight: 600,
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                      }}>
+                      {c.label}
+                      {locked && <Lock size={12} color="#475569" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : loading ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
               height: '60vh', flexDirection: 'column', gap: 12 }}>
               <div style={{ width: 40, height: 40, border: '3px solid #1e293b',
@@ -307,6 +378,27 @@ export default function Dashboard() {
                   Week of {summary.week_of} · {summary.kpis?.total_permits} permits issued
                 </p>
               </div>
+
+              {/* PART C: one-time first-login onboarding, above the permit content */}
+              {showWelcome && !isPreview && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+                  background: 'linear-gradient(135deg, #1e3a5f 0%, #0d1529 100%)',
+                  border: '1px solid #2563eb40', borderRadius: 12,
+                  padding: '14px 18px', marginBottom: 24, flexWrap: 'wrap',
+                }}>
+                  <span style={{ fontSize: 14, color: '#e2e8f0' }}>
+                    👋 Welcome to PermitMap. You&apos;re viewing <strong>{summary.label}</strong> permits.
+                    Star any permit to save it as a lead. →
+                  </span>
+                  <button onClick={dismissWelcome} style={{
+                    background: 'transparent', border: '1px solid #2563eb60', color: '#93c5fd',
+                    borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  }}>
+                    Dismiss
+                  </button>
+                </div>
+              )}
 
               {/* Phase B: Weekly Digest Card — 60-second briefing, above the Opportunity Queue.
                   Paid/trial only (digest 403 for preview -> digest stays null -> card hidden). */}
