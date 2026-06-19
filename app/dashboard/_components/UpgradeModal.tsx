@@ -38,23 +38,29 @@ function money(v: any): string {
 
 export default function UpgradeModal({
   countyKey, countyLabel, countyCount, tier, limits, userId, getToken, onClose,
+  trigger = 'locked_county',
 }: {
-  countyKey: string;
-  countyLabel: string;
+  countyKey?: string;              // optional — absent when opened generically
+  countyLabel?: string;
   countyCount?: number;            // fallback permit count from /counties
   tier: string;
   limits: { counties: number; permits: number; label: string };
   userId?: string | null;
   getToken?: GetToken;
   onClose: () => void;
+  trigger?: 'locked_county' | 'get_full_access_button';
 }) {
+  // Generic mode (e.g. "Get Full Access" button): no specific county in context.
+  const isGeneric = !countyKey;
   const variants = headlineVariants(limits.label, limits.counties);
   const variant = variants[pickVariant(userId, variants.length)];
   const [selected, setSelected] = useState<Plan>('pro'); // Pro highlighted by default
   const [kpis, setKpis] = useState<any>(null);
 
   // Real data for the locked county. Best-effort — modal still works if it fails.
+  // Skipped in generic mode (no county to summarize).
   useEffect(() => {
+    if (!countyKey) return;
     let cancelled = false;
     apiFetch(`/summary?county=${countyKey}`, getToken)
       .then(r => (r.ok ? r.json() : null))
@@ -63,10 +69,12 @@ export default function UpgradeModal({
     return () => { cancelled = true; };
   }, [countyKey, getToken]);
 
-  // Fire upgrade_modal_open once, with the variant.
+  // Fire upgrade_modal_open once, with the variant + trigger.
   useEffect(() => {
     track(getToken, 'upgrade_modal_open', {
-      county: countyKey, source: 'county_sidebar', properties: { variant: variant.id },
+      county: countyKey || undefined,
+      source: trigger === 'get_full_access_button' ? 'get_full_access_button' : 'county_sidebar',
+      properties: { variant: variant.id, trigger },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -86,6 +94,11 @@ export default function UpgradeModal({
 
   const startTrial = () => {
     const { url, clientReferenceId } = checkoutUrl(selected, { userId, county: countyKey });
+    // Conversion event with trigger context (county vs Get Full Access button).
+    track(getToken, 'upgrade_modal_cta_click', {
+      county: countyKey || undefined,
+      properties: { trigger, county: countyLabel ?? null, plan_highlighted: 'pro', variant: variant.id },
+    });
     // Always record the click, even if a cref couldn't be generated.
     track(getToken, 'upgrade_cta_click', {
       plan: selected, county: countyKey,
@@ -115,21 +128,25 @@ export default function UpgradeModal({
   if (avgValue) chips.push({ icon: DollarSign, label: 'Avg project value', value: avgValue });
 
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(2,6,23,0.72)', zIndex: 1000,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
-      }}
-    >
+    <div onClick={onClose} className="pm-upg-overlay">
+      {/* Inline styles can't express media queries — this block makes the modal
+          a centered card on desktop and full-screen on mobile (<= 640px). */}
+      <style>{`
+        .pm-upg-overlay { position: fixed; inset: 0; background: rgba(2,6,23,0.72);
+          z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .pm-upg-dialog { background: #0d1529; border: 1px solid #1e293b; border-radius: 16px;
+          width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto;
+          padding: 24px 26px; box-shadow: 0 24px 64px rgba(0,0,0,0.55); }
+        @media (max-width: 640px) {
+          .pm-upg-overlay { padding: 0; }
+          .pm-upg-dialog { max-width: 100%; max-height: 100vh; height: 100vh;
+            border-radius: 0; border: none; padding: 20px 18px; }
+        }
+      `}</style>
       <div
         onClick={e => e.stopPropagation()}
         role="dialog" aria-modal="true" aria-label="Upgrade"
-        style={{
-          background: '#0d1529', border: '1px solid #1e293b', borderRadius: 16,
-          width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto',
-          padding: '24px 26px', boxShadow: '0 24px 64px rgba(0,0,0,0.55)',
-        }}
+        className="pm-upg-dialog"
       >
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
@@ -152,8 +169,12 @@ export default function UpgradeModal({
         <div style={{ margin: '16px 0', padding: '14px 16px', borderRadius: 12,
           background: 'linear-gradient(135deg, #1e3a5f 0%, #0d1529 100%)', border: '1px solid #2563eb40' }}>
           <div style={{ fontSize: 11, color: '#60a5fa', fontWeight: 700, textTransform: 'uppercase',
-            letterSpacing: '0.08em', marginBottom: 6 }}>You're trying to open</div>
-          <div style={{ fontSize: 17, fontWeight: 700, color: '#f1f5f9' }}>{countyLabel}</div>
+            letterSpacing: '0.08em', marginBottom: 6 }}>
+            {isGeneric ? 'With full access' : "You're trying to open"}
+          </div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: '#f1f5f9' }}>
+            {isGeneric ? 'Every county across Florida & Texas' : countyLabel}
+          </div>
           {chips.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
               gap: 12, marginTop: 12 }}>

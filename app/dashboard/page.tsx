@@ -105,14 +105,19 @@ export default function Dashboard() {
   const [loading, setLoading]       = useState(true);
   const [activeTab, setActiveTab]   = useState<'opportunities' | 'permits' | 'trends' | 'insights'>('opportunities');
   const [tradeFilter, setTradeFilter] = useState('');
-  const [upgradeCounty, setUpgradeCounty] = useState<any | null>(null);
+  const [upgrade, setUpgrade] = useState<
+    { trigger: 'locked_county' | 'get_full_access_button'; county: any | null } | null
+  >(null);
 
   // Locked county click → record the lock view and open the upgrade modal
   // (instead of silently doing nothing). The modal fires upgrade_modal_open itself.
   const openUpgrade = (c: any) => {
     track(getToken, 'locked_county_view', { county: c.key, source: 'county_sidebar' });
-    setUpgradeCounty(c);
+    setUpgrade({ trigger: 'locked_county', county: c });
   };
+
+  // "Get Full Access" button → open the modal generically (no specific county).
+  const openFullAccess = () => setUpgrade({ trigger: 'get_full_access_button', county: null });
 
   // Load counties
   useEffect(() => {
@@ -212,16 +217,17 @@ export default function Dashboard() {
           <span style={{ fontSize: 13, color: '#64748b' }}>
             {user?.emailAddresses?.[0]?.emailAddress}
           </span>
-          {tier === 'starter' && (
-            <a href="/pricing" style={{
+          {tier !== 'team' && (
+            <button onClick={openFullAccess} style={{
               background: '#2563eb',
               color: '#fff',
               fontSize: 12,
               fontWeight: 600,
               padding: '6px 14px',
               borderRadius: 6,
-              textDecoration: 'none',
-            }}>Upgrade →</a>
+              border: 'none',
+              cursor: 'pointer',
+            }}>Get Full Access</button>
           )}
         </div>
       </header>
@@ -598,16 +604,17 @@ export default function Dashboard() {
         </main>
       </div>
 
-      {upgradeCounty && (
+      {upgrade && (
         <UpgradeModal
-          countyKey={upgradeCounty.key}
-          countyLabel={upgradeCounty.label}
-          countyCount={upgradeCounty.count}
+          trigger={upgrade.trigger}
+          countyKey={upgrade.county?.key}
+          countyLabel={upgrade.county?.label}
+          countyCount={upgrade.county?.count}
           tier={tier}
           limits={limits}
           userId={user?.id}
           getToken={getToken}
-          onClose={() => setUpgradeCounty(null)}
+          onClose={() => setUpgrade(null)}
         />
       )}
 
