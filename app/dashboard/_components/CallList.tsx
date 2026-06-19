@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { Target, MapPin, Clock, DollarSign, Flame, TrendingUp, ChevronRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Target, MapPin, Clock, DollarSign, Flame, TrendingUp, ChevronRight, Star } from 'lucide-react';
+import { getSavedLeads, saveLead, type GetToken } from '../../../lib/api';
 
 // ── Phase A: "Best Opportunities This Week" — ranked pursuit queue + explainability.
 // Data source: /permits/scored (already sorted by score desc, score>=50, tier-capped).
@@ -95,9 +96,76 @@ function ScoreBadge({ score, size = 44 }: { score: number; size?: number }) {
   );
 }
 
-export default function CallList({ scored, topZips }: { scored: any[]; topZips: string[] }) {
+// Phase C: save-state star. Spinner while a save is in flight; filled yellow once
+// saved (not a toggle — unsaving happens in the Saved tab); outline otherwise.
+function SaveStar({ saved, saving, onClick }: { saved: boolean; saving: boolean; onClick: () => void }) {
+  if (saving) {
+    return (
+      <span style={{ display: 'inline-flex', width: 32, height: 32, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <span style={{ width: 16, height: 16, border: '2px solid #1e293b', borderTop: '2px solid #facc15',
+          borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      </span>
+    );
+  }
+  return (
+    <button onClick={saved ? undefined : onClick} disabled={saved}
+      title={saved ? 'Saved' : 'Save lead'} aria-label={saved ? 'Saved' : 'Save lead'}
+      style={{ display: 'inline-flex', width: 32, height: 32, alignItems: 'center', justifyContent: 'center',
+        background: 'transparent', border: 'none', padding: 0, flexShrink: 0,
+        cursor: saved ? 'default' : 'pointer' }}>
+      <Star size={20} color={saved ? '#facc15' : '#475569'} fill={saved ? '#facc15' : 'none'} />
+    </button>
+  );
+}
+
+export default function CallList({ scored, topZips, getToken }:
+  { scored: any[]; topZips: string[]; getToken: GetToken }) {
   const [tradeFilter, setTradeFilter] = useState('');
   const hotZips = new Set((topZips || []).map(z => String(z).trim()));
+
+  // Phase C: save state. One getSavedLeads() call on mount builds a Set of saved
+  // permit_ids for O(1) star lookup — never one request per row.
+  const [savedIds, setSavedIds]   = useState<Set<string>>(new Set());
+  const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+  const [toast, setToast]         = useState<{ id: number; msg: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getSavedLeads(getToken)
+      .then(d => { if (!cancelled) setSavedIds(new Set((d.leads || []).map(l => l.permit_id))); })
+      .catch(() => {});   // preview/403 or network — leave stars empty, non-fatal
+    return () => { cancelled = true; };
+  }, [getToken]);
+
+  // Auto-dismiss the toast after 2.5s (id retriggers the timer on repeat messages).
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const notify = (msg: string) => setToast(prev => ({ id: (prev?.id ?? 0) + 1, msg }));
+
+  const handleSave = async (p: any) => {
+    const pno = String(p?.PERMITNO ?? '');
+    if (!pno || savedIds.has(pno) || savingIds.has(pno)) return;   // not a toggle
+    setSavingIds(prev => new Set(prev).add(pno));
+    try {
+      const res = await saveLead(getToken, p);
+      setSavedIds(prev => new Set(prev).add(pno));                 // fill on success
+      notify(res.already_saved ? 'Already in your saved leads' : 'Lead saved');
+    } catch {
+      setSavedIds(prev => { const n = new Set(prev); n.delete(pno); return n; });  // revert
+      notify('Failed to save — try again');
+    } finally {
+      setSavingIds(prev => { const n = new Set(prev); n.delete(pno); return n; });
+    }
+  };
+
+  const starProps = (p: any) => {
+    const pno = String(p?.PERMITNO ?? '');
+    return { saved: savedIds.has(pno), saving: savingIds.has(pno), onClick: () => handleSave(p) };
+  };
 
   const list = (scored || []).filter(p => !tradeFilter || (p.trade || '').toLowerCase() === tradeFilter);
   const hero = list[0];
@@ -142,9 +210,11 @@ export default function CallList({ scored, topZips }: { scored: any[]; topZips: 
             background: 'linear-gradient(135deg, #14532d20 0%, #0d1529 100%)',
             border: '1px solid #22c55e55', borderRadius: 14, padding: '22px 26px', marginBottom: 20,
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              gap: 8, marginBottom: 12 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: '#22c55e',
                 textTransform: 'uppercase', letterSpacing: '0.1em' }}>★ Pursue first</span>
+              <SaveStar {...starProps(hero)} />
             </div>
             <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
               <ScoreBadge score={hero.score} size={56} />
@@ -210,10 +280,23 @@ export default function CallList({ scored, topZips }: { scored: any[]; topZips: 
                     {deriveReasons(p, hotZips).map((r, j) => <ReasonChip key={j} r={r} />)}
                   </div>
                 </div>
+                <SaveStar {...starProps(p)} />
               </div>
             ))}
           </div>
         </>
+      )}
+
+      {/* Phase C: lightweight toast (no dependency) — auto-dismisses after 2.5s */}
+      {toast && (
+        <div role="status" style={{
+          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+          background: '#1e293b', color: '#f1f5f9', border: '1px solid #334155',
+          borderRadius: 8, padding: '10px 18px', fontSize: 13, fontWeight: 600,
+          zIndex: 1000, boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+        }}>
+          {toast.msg}
+        </div>
       )}
     </div>
   );
