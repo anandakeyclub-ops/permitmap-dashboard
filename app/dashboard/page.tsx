@@ -5,6 +5,9 @@ import { useUser, useAuth } from '@clerk/nextjs';
 import { apiFetch } from '../../lib/api';
 import CallList from './_components/CallList';
 import DigestCard from './_components/DigestCard';
+import UpgradeModal from './_components/UpgradeModal';
+import { track } from '../../lib/analytics';
+import { TRIAL_LINKS } from '../../lib/checkout';
 import SavedLeads from './_components/SavedLeads';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell
@@ -36,12 +39,8 @@ const TRADE_COLORS: Record<string, string> = {
 const SCORE_COLOR = (s: number) =>
   s >= 80 ? '#22c55e' : s >= 60 ? '#f97316' : s >= 40 ? '#eab308' : '#6b7280';
 
-// Trial-enabled Stripe checkout links ($0 due today, 14-day trial).
-const CHECKOUT = {
-  starter: 'https://buy.stripe.com/14AeVddOnbPx1g23VIdUY04',
-  pro:     'https://buy.stripe.com/3cI7sLfWv2eXaQC9g2dUY05',
-  team:    'https://buy.stripe.com/aFa00jeSraLtgaW4ZMdUY06',
-};
+// Trial-enabled Stripe checkout links — single source of truth in lib/checkout.ts.
+const CHECKOUT = TRIAL_LINKS;
 
 // Phase 1.5: shown to authenticated users with no paid tier (preview entitlement).
 // The API returns counts only (preview_locked=true) and zero permit rows, so we
@@ -107,6 +106,19 @@ export default function Dashboard() {
   const [loading, setLoading]       = useState(true);
   const [activeTab, setActiveTab]   = useState<'opportunities' | 'permits' | 'trends' | 'insights' | 'saved'>('opportunities');
   const [tradeFilter, setTradeFilter] = useState('');
+  const [upgrade, setUpgrade] = useState<
+    { trigger: 'locked_county' | 'get_full_access_button'; county: any | null } | null
+  >(null);
+
+  // Locked county click → record the lock view and open the upgrade modal
+  // (instead of silently doing nothing). The modal fires upgrade_modal_open itself.
+  const openUpgrade = (c: any) => {
+    track(getToken, 'locked_county_view', { county: c.key, source: 'county_sidebar' });
+    setUpgrade({ trigger: 'locked_county', county: c });
+  };
+
+  // "Get Full Access" button → open the modal generically (no specific county).
+  const openFullAccess = () => setUpgrade({ trigger: 'get_full_access_button', county: null });
 
   // Load counties
   useEffect(() => {
@@ -206,16 +218,17 @@ export default function Dashboard() {
           <span style={{ fontSize: 13, color: '#64748b' }}>
             {user?.emailAddresses?.[0]?.emailAddress}
           </span>
-          {tier === 'starter' && (
-            <a href="/pricing" style={{
+          {tier !== 'team' && (
+            <button onClick={openFullAccess} style={{
               background: '#2563eb',
               color: '#fff',
               fontSize: 12,
               fontWeight: 600,
               padding: '6px 14px',
               borderRadius: 6,
-              textDecoration: 'none',
-            }}>Upgrade →</a>
+              border: 'none',
+              cursor: 'pointer',
+            }}>Get Full Access</button>
           )}
         </div>
       </header>
@@ -239,11 +252,11 @@ export default function Dashboard() {
             const locked = isLocked(i);
             const active = c.key === county;
             return (
-              <button key={c.key} onClick={() => !locked && setCounty(c.key)}
+              <button key={c.key} onClick={() => (locked ? openUpgrade(c) : setCounty(c.key))}
                 style={{
                   width: '100%', textAlign: 'left', padding: '10px 16px',
                   background: active ? '#1e3a5f' : 'transparent',
-                  border: 'none', cursor: locked ? 'not-allowed' : 'pointer',
+                  border: 'none', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   opacity: locked ? 0.4 : 1,
                   borderLeft: active ? '3px solid #3b82f6' : '3px solid transparent',
@@ -600,6 +613,20 @@ export default function Dashboard() {
           )}
         </main>
       </div>
+
+      {upgrade && (
+        <UpgradeModal
+          trigger={upgrade.trigger}
+          countyKey={upgrade.county?.key}
+          countyLabel={upgrade.county?.label}
+          countyCount={upgrade.county?.count}
+          tier={tier}
+          limits={limits}
+          userId={user?.id}
+          getToken={getToken}
+          onClose={() => setUpgrade(null)}
+        />
+      )}
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&display=swap');
