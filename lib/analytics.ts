@@ -13,6 +13,7 @@ export type FunnelEvent =
   | 'upgrade_modal_open'
   | 'upgrade_plan_selected'
   | 'upgrade_cta_click'
+  | 'upgrade_modal_cta_click'
   | 'stripe_checkout_started';
 
 export interface TrackProps {
