@@ -1,6 +1,13 @@
 import { SignUp } from '@clerk/nextjs';
 
-export default function SignUpPage() {
+// Reads ?county=<slug> from the marketing funnel and attaches it as unsafeMetadata
+// on the new user. A server action later promotes it to publicMetadata (PART A).
+export default async function SignUpPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ county?: string }>;
+}) {
+  const { county } = await searchParams;
   return (
     <div style={{
       minHeight: '100vh',
@@ -9,7 +16,7 @@ export default function SignUpPage() {
       alignItems: 'center',
       justifyContent: 'center',
     }}>
-      <SignUp />
+      <SignUp unsafeMetadata={county ? { county } : undefined} />
     </div>
   );
 }
