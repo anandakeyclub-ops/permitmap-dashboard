@@ -1,6 +1,6 @@
 'use client';
 
-import { TRIAL_LINKS } from '../../lib/checkout';
+import { startCheckout } from '../../lib/start-checkout';
 
 export default function Pricing() {
   const tiers = [
@@ -18,7 +18,7 @@ export default function Pricing() {
         'Weekly insights',
       ],
       cta: 'Get Started',
-      href: TRIAL_LINKS.starter,
+      plan: 'starter' as const,
       highlight: false,
     },
     {
@@ -35,7 +35,7 @@ export default function Pricing() {
         'Priority support',
       ],
       cta: 'Go Pro',
-      href: TRIAL_LINKS.pro,
+      plan: 'pro' as const,
       highlight: true,
     },
     {
@@ -52,7 +52,7 @@ export default function Pricing() {
         'Priority support',
       ],
       cta: 'Start Team Plan',
-      href: TRIAL_LINKS.team,
+      plan: 'team' as const,
       highlight: false,
     },
   ];
@@ -119,14 +119,13 @@ export default function Pricing() {
                 ))}
               </ul>
 
-              <a href={tier.href} style={{
-                display: 'block', textAlign: 'center',
+              <button onClick={() => startCheckout(tier.plan)} style={{
+                display: 'block', width: '100%', textAlign: 'center',
                 padding: '12px 24px', borderRadius: 8,
                 background: tier.highlight ? '#2563eb' : '#1e293b',
-                color: '#fff', fontWeight: 700, fontSize: 14,
-                textDecoration: 'none',
+                color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer',
                 border: tier.highlight ? 'none' : '1px solid #334155',
-              }}>{tier.cta}</a>
+              }}>{tier.cta}</button>
             </div>
           ))}
         </div>
