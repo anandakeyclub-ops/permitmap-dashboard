@@ -20,8 +20,11 @@ import {
 
 // API base + auth lives in lib/api.ts (apiFetch attaches the Clerk JWT when available).
 
-// Tier limits
+// Tier limits. `preview` is the unpaid state (no paid tier metadata) — NOT a free
+// Starter. Signing up never assigns a paid tier; only the Stripe webhook does. Data
+// access is server-authoritative (preview_locked); these limits are display/fetch caps.
 const TIER_LIMITS: Record<string, { counties: number; permits: number; label: string }> = {
+  preview: { counties: 1, permits: 50,  label: 'Preview' },
   starter: { counties: 1, permits: 50,  label: 'Starter' },
   pro:     { counties: 5, permits: 500, label: 'Pro' },
   team:    { counties: 99, permits: 9999, label: 'Team' },
@@ -92,8 +95,9 @@ function PreviewLock({ compact = false }: { compact?: boolean }) {
 export default function Dashboard() {
   const { user } = useUser();
   const { getToken } = useAuth();
-  const tier = (user?.publicMetadata?.tier as string) || 'starter';
-  const limits = TIER_LIMITS[tier] || TIER_LIMITS.starter;
+  // No paid tier metadata = Preview (the only free/unpaid state). Never default to Starter.
+  const tier = (user?.publicMetadata?.tier as string) || 'preview';
+  const limits = TIER_LIMITS[tier] || TIER_LIMITS.preview;
 
   const [counties, setCounties]     = useState<any[]>([]);
   const [county, setCounty]         = useState('');  // '' until resolved (localStorage / Clerk metadata) or user picks

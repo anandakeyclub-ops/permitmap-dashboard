@@ -3,10 +3,15 @@
 // /api/checkout route; if the visitor isn't signed in (401) it routes them to sign-in
 // first (checkout requires a Clerk identity — the root-cause fix).
 
+import type { IntentParams } from './checkout-intent';
+
 export interface StartCheckoutDeps {
   fetchFn?: typeof fetch;
   navigate?: (url: string) => void;
   currentPath?: string;
+  // Allowlisted attribution to forward into the Checkout Session metadata. In-app
+  // upgrade CTAs omit it (no marketing context); the resume flow passes it through.
+  attribution?: IntentParams | null;
 }
 
 export async function startCheckout(
@@ -21,7 +26,7 @@ export async function startCheckout(
   const res = await f('/api/checkout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ plan }),
+    body: JSON.stringify(deps.attribution ? { plan, attribution: deps.attribution } : { plan }),
   });
 
   if (res.status === 401) {

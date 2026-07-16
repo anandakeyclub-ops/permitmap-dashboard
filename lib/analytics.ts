@@ -14,7 +14,8 @@ export type FunnelEvent =
   | 'upgrade_plan_selected'
   | 'upgrade_cta_click'
   | 'upgrade_modal_cta_click'
-  | 'stripe_checkout_started';
+  | 'stripe_checkout_started'
+  | 'checkout_resume_failed';
 
 export interface TrackProps {
   county?: string;
