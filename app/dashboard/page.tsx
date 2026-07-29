@@ -7,7 +7,7 @@ import CallList from './_components/CallList';
 import DigestCard from './_components/DigestCard';
 import UpgradeModal from './_components/UpgradeModal';
 import { track } from '../../lib/analytics';
-import { TRIAL_LINKS } from '../../lib/checkout';
+import { startCheckout } from '../../lib/start-checkout';
 import SavedLeads from './_components/SavedLeads';
 import { promoteSignupCounty, dismissFirstLogin } from '../actions';
 import {
@@ -20,8 +20,11 @@ import {
 
 // API base + auth lives in lib/api.ts (apiFetch attaches the Clerk JWT when available).
 
-// Tier limits
+// Tier limits. `preview` is the unpaid state (no paid tier metadata) — NOT a free
+// Starter. Signing up never assigns a paid tier; only the Stripe webhook does. Data
+// access is server-authoritative (preview_locked); these limits are display/fetch caps.
 const TIER_LIMITS: Record<string, { counties: number; permits: number; label: string }> = {
+  preview: { counties: 1, permits: 50,  label: 'Preview' },
   starter: { counties: 1, permits: 50,  label: 'Starter' },
   pro:     { counties: 5, permits: 500, label: 'Pro' },
   team:    { counties: 99, permits: 9999, label: 'Team' },
@@ -39,9 +42,6 @@ const TRADE_COLORS: Record<string, string> = {
 
 const SCORE_COLOR = (s: number) =>
   s >= 80 ? '#22c55e' : s >= 60 ? '#f97316' : s >= 40 ? '#eab308' : '#6b7280';
-
-// Trial-enabled Stripe checkout links — single source of truth in lib/checkout.ts.
-const CHECKOUT = TRIAL_LINKS;
 
 // Phase 1.5: shown to authenticated users with no paid tier (preview entitlement).
 // The API returns counts only (preview_locked=true) and zero permit rows, so we
@@ -70,23 +70,23 @@ function PreviewLock({ compact = false }: { compact?: boolean }) {
         and scored opportunities.
       </p>
       <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-        <a href={CHECKOUT.starter} style={{
+        <button onClick={() => startCheckout('starter')} style={{
           background: '#2563eb', color: '#fff', fontSize: 13, fontWeight: 700,
-          padding: '10px 22px', borderRadius: 8, textDecoration: 'none' }}>
+          padding: '10px 22px', borderRadius: 8, border: 'none', cursor: 'pointer' }}>
           Start Starter trial →
-        </a>
-        <a href={CHECKOUT.pro} style={{
+        </button>
+        <button onClick={() => startCheckout('pro')} style={{
           background: 'transparent', color: '#93c5fd', fontSize: 13, fontWeight: 600,
-          padding: '10px 18px', borderRadius: 8, textDecoration: 'none',
+          padding: '10px 18px', borderRadius: 8, cursor: 'pointer',
           border: '1px solid #2563eb60' }}>
           Pro
-        </a>
-        <a href={CHECKOUT.team} style={{
+        </button>
+        <button onClick={() => startCheckout('team')} style={{
           background: 'transparent', color: '#93c5fd', fontSize: 13, fontWeight: 600,
-          padding: '10px 18px', borderRadius: 8, textDecoration: 'none',
+          padding: '10px 18px', borderRadius: 8, cursor: 'pointer',
           border: '1px solid #2563eb60' }}>
           Team
-        </a>
+        </button>
       </div>
     </div>
   );
@@ -95,8 +95,9 @@ function PreviewLock({ compact = false }: { compact?: boolean }) {
 export default function Dashboard() {
   const { user } = useUser();
   const { getToken } = useAuth();
-  const tier = (user?.publicMetadata?.tier as string) || 'starter';
-  const limits = TIER_LIMITS[tier] || TIER_LIMITS.starter;
+  // No paid tier metadata = Preview (the only free/unpaid state). Never default to Starter.
+  const tier = (user?.publicMetadata?.tier as string) || 'preview';
+  const limits = TIER_LIMITS[tier] || TIER_LIMITS.preview;
 
   const [counties, setCounties]     = useState<any[]>([]);
   const [county, setCounty]         = useState('');  // '' until resolved (localStorage / Clerk metadata) or user picks

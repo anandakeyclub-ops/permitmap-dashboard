@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { X, Lock, MapPin, TrendingUp, DollarSign, Building2, Check } from 'lucide-react';
 import { apiFetch } from '../../../lib/api';
-import { checkoutUrl, type Plan } from '../../../lib/checkout';
+import { type Plan } from '../../../lib/checkout';
+import { startCheckout } from '../../../lib/start-checkout';
 import { track } from '../../../lib/analytics';
 
 type GetToken = (options?: { template?: string }) => Promise<string | null>;
@@ -93,24 +94,24 @@ export default function UpgradeModal({
   };
 
   const startTrial = () => {
-    const { url, clientReferenceId } = checkoutUrl(selected, { userId, county: countyKey });
     // Conversion event with trigger context (county vs Get Full Access button).
     track(getToken, 'upgrade_modal_cta_click', {
       county: countyKey || undefined,
       properties: { trigger, county: countyLabel ?? null, plan_highlighted: 'pro', variant: variant.id },
     });
-    // Always record the click, even if a cref couldn't be generated.
+    // client_reference_id is now set server-side (= Clerk user id) by /api/checkout.
     track(getToken, 'upgrade_cta_click', {
       plan: selected, county: countyKey,
-      client_reference_id: clientReferenceId || undefined,
+      client_reference_id: userId || undefined,
       properties: { variant: variant.id },
     });
     track(getToken, 'stripe_checkout_started', {
       plan: selected, county: countyKey,
-      client_reference_id: clientReferenceId || undefined,
+      client_reference_id: userId || undefined,
       properties: { variant: variant.id },
     });
-    window.location.href = url; // analytics is keepalive → survives navigation
+    // Authenticated, server-side Checkout Session (no anonymous Payment Link).
+    void startCheckout(selected); // analytics uses keepalive → survives navigation
   };
 
   const totalPermits = kpis?.total_permits ?? countyCount;
