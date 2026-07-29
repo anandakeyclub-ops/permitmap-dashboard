@@ -8,6 +8,22 @@ export const PRICE_TO_TIER: Record<string, string> = {
 };
 export const TIER_COUNTIES: Record<string, number> = { starter: 1, pro: 5, team: 99 };
 
+// Tiers that grant ALL counties — no per-county entitlement required (mirrors
+// permitmap_api verify_admin.ALL_COUNTY_TIERS). County-limited tiers (starter/pro) need a
+// non-empty allowed_counties list or the weekly digest is ineligible ("no county configured").
+export const ALL_COUNTY_TIERS = new Set<string>(['team']);
+
+// The county the customer selected at checkout, stamped onto the Checkout Session and
+// subscription_data metadata by buildCheckoutParams (allowlisted, PII-free attribution).
+// Normalized to the lowercase underscore slug the API/data pipeline uses
+// (e.g. "Marion" → "marion", "St. Lucie" → "st_lucie").
+export function resolveSelectedCounty(metadata?: Record<string, any> | null): string | null {
+  const raw = metadata?.county;
+  if (!raw || typeof raw !== 'string') return null;
+  const slug = raw.trim().toLowerCase().replace(/[.\s-]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+  return slug || null;
+}
+
 // client_reference_id may be a raw Clerk id (server-side checkout) or the legacy token
 // v1_dashboard_upgrade_{userId}_{county}_{plan}_{yyyymmdd}. metadata.clerk_user_id preferred.
 export function resolveClerkUserId(
@@ -49,12 +65,19 @@ async function persistMapping(stripe: StripeLike, customerId: string, subId: str
 // absent) and ALERT that identity was missing at checkout.
 export async function provision(
   stripe: StripeLike, clerk: ClerkLike, alert: Alert,
-  args: { email: string | null; tier: string; customerId: string; subId: string; clerkUserId: string | null },
+  args: { email: string | null; tier: string; customerId: string; subId: string; clerkUserId: string | null; county?: string | null },
 ): Promise<void> {
-  const metadata = {
+  const metadata: Record<string, any> = {
     tier: args.tier, stripe_customer_id: args.customerId, stripe_subscription_id: args.subId,
     counties_allowed: TIER_COUNTIES[args.tier] || 1, billing_status: 'active',
   };
+  // County-limited tiers (starter/pro) must carry the SPECIFIC selected county as
+  // allowed_counties, or the weekly digest is ineligible ("no county configured for
+  // county-limited tier"). Team grants all counties, so this is skipped. Only set when a
+  // county is known, so an event without county metadata never clobbers an existing list.
+  if (!ALL_COUNTY_TIERS.has(args.tier) && args.county) {
+    metadata.allowed_counties = [args.county];
+  }
   if (args.clerkUserId) {
     await clerk.users.updateUserMetadata(args.clerkUserId, { publicMetadata: metadata });
     await persistMapping(stripe, args.customerId, args.subId, args.clerkUserId);
@@ -99,7 +122,8 @@ export async function handleStripeEvent(
       const sub = await stripe.subscriptions.retrieve(subId);
       const tier = PRICE_TO_TIER[sub.items.data[0]?.price?.id || ''] || 'starter';
       const clerkUserId = resolveClerkUserId(s.metadata, s.client_reference_id) || resolveClerkUserId(sub.metadata, null);
-      await provision(stripe, clerk, alert, { email, tier, customerId: custId, subId, clerkUserId });
+      const county = resolveSelectedCounty(s.metadata) || resolveSelectedCounty(sub.metadata);
+      await provision(stripe, clerk, alert, { email, tier, customerId: custId, subId, clerkUserId, county });
       await emit('trial_started', { client_reference_id: s.client_reference_id || undefined, stripe_session_id: s.id, stripe_subscription_id: subId, email: email || undefined, plan: tier, properties: { customer_id: custId, subscription_status: sub.status, clerk_user_id: clerkUserId || undefined } });
     }
   } else if (event.type === 'invoice.payment_succeeded') {
@@ -111,7 +135,8 @@ export async function handleStripeEvent(
       const custId = sub.customer as string;
       const clerkUserId = resolveClerkUserId(sub.metadata, null);
       const email = inv.customer_email || (await emailFromCustomer(stripe, custId));
-      await provision(stripe, clerk, alert, { email, tier, customerId: custId, subId, clerkUserId });
+      const county = resolveSelectedCounty(sub.metadata);
+      await provision(stripe, clerk, alert, { email, tier, customerId: custId, subId, clerkUserId, county });
       await emit('paid_subscription_started', { stripe_subscription_id: subId, email: email || undefined, plan: tier, properties: { invoice_id: inv.id, amount_paid: inv.amount_paid, clerk_user_id: clerkUserId || undefined } });
     }
   } else if (event.type === 'customer.subscription.created' || event.type === 'customer.subscription.updated') {
@@ -120,7 +145,8 @@ export async function handleStripeEvent(
     const custId = sub.customer as string;
     const clerkUserId = resolveClerkUserId(sub.metadata, null);
     const email = await emailFromCustomer(stripe, custId);
-    await provision(stripe, clerk, alert, { email, tier, customerId: custId, subId: sub.id, clerkUserId });
+    const county = resolveSelectedCounty(sub.metadata);
+    await provision(stripe, clerk, alert, { email, tier, customerId: custId, subId: sub.id, clerkUserId, county });
   } else if (event.type === 'customer.subscription.deleted') {
     const sub = event.data.object;
     const clerkUserId = resolveClerkUserId(sub.metadata, null);

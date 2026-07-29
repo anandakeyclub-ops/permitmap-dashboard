@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { handleCheckout, buildCheckoutParams, PRICE_BY_PLAN } from '../lib/checkout-session';
-import { handleWebhook, resolveClerkUserId, PRICE_TO_TIER } from '../lib/provisioning';
+import { handleWebhook, resolveClerkUserId, resolveSelectedCounty, PRICE_TO_TIER } from '../lib/provisioning';
 import { startCheckout } from '../lib/start-checkout';
 
 const APP = 'https://app.permitmap.org';
@@ -224,5 +224,62 @@ describe('trial & pricing invariants', () => {
     const tiersWritten = clerk.updateUserMetadata.mock.calls.map((c: any) => c[1].publicMetadata.tier);
     expect(tiersWritten).toEqual(['team', 'team']);  // tier unchanged across trial → paid
     expect(clerk.createUser).not.toHaveBeenCalled();
+  });
+});
+
+// ── County entitlement (county-limited tiers get allowed_counties from checkout) ──────
+const PRICE_PRO = 'price_1TMtStIgaDPbFgUVPFOUjBMW';
+
+describe('resolveSelectedCounty', () => {
+  it('normalizes to the lowercase underscore slug', () => {
+    expect(resolveSelectedCounty({ county: 'Marion' })).toBe('marion');
+    expect(resolveSelectedCounty({ county: 'St. Lucie' })).toBe('st_lucie');
+    expect(resolveSelectedCounty({ county: ' Palm  Beach ' })).toBe('palm_beach');
+    expect(resolveSelectedCounty({ county: 'west-palm-beach' })).toBe('west_palm_beach');
+  });
+  it('null when no county present', () => {
+    expect(resolveSelectedCounty({})).toBeNull();
+    expect(resolveSelectedCounty(null)).toBeNull();
+    expect(resolveSelectedCounty({ county: '' })).toBeNull();
+  });
+});
+
+describe('county entitlement provisioning', () => {
+  it('Pro checkout.session.completed with a selected county → allowed_counties=[county]', async () => {
+    const s = fakeStripe({ clerk_user_id: 'user_p' }, PRICE_PRO);   // retrieved sub → pro
+    const clerk = fakeClerk(); const alert = vi.fn();
+    const body = evt('checkout.session.completed', { subscription: 'sub_1', customer: 'cus_1', customer_email: 'm@x.com', metadata: { clerk_user_id: 'user_p', county: 'Marion' }, client_reference_id: null, id: 'cs_1' });
+    const r = await handleWebhook({ stripe: s as any, clerk: clerk as any, body, sig: 'x', secret: 'sec', emit, alert });
+    expect(r.status).toBe(200);
+    expect(clerk.updateUserMetadata).toHaveBeenCalledWith('user_p', { publicMetadata: expect.objectContaining({ tier: 'pro', counties_allowed: 5, allowed_counties: ['marion'], billing_status: 'active' }) });
+  });
+
+  it('Pro trialing customer.subscription.created with a selected county → allowed_counties=[county]', async () => {
+    const s = fakeStripe({});   // customers.retrieve provides fallback email
+    const clerk = fakeClerk(); const alert = vi.fn();
+    const body = evt('customer.subscription.created', { id: 'sub_9', customer: 'cus_1', status: 'trialing', items: { data: [{ price: { id: PRICE_PRO } }] }, metadata: { clerk_user_id: 'user_p', county: 'Marion' } });
+    const r = await handleWebhook({ stripe: s as any, clerk: clerk as any, body, sig: 'x', secret: 'sec', emit, alert });
+    expect(r.status).toBe(200);
+    expect(clerk.updateUserMetadata).toHaveBeenCalledWith('user_p', { publicMetadata: expect.objectContaining({ tier: 'pro', allowed_counties: ['marion'] }) });
+  });
+
+  it('Team (all-county tier) never gets allowed_counties even if a county is present', async () => {
+    const s = fakeStripe({});
+    const clerk = fakeClerk(); const alert = vi.fn();
+    const body = evt('customer.subscription.created', { id: 'sub_t', customer: 'cus_1', status: 'trialing', items: { data: [{ price: { id: 'price_1TMtThIgaDPbFgUVoxIWlvf3' } }] }, metadata: { clerk_user_id: 'user_tm', county: 'Marion' } });
+    await handleWebhook({ stripe: s as any, clerk: clerk as any, body, sig: 'x', secret: 'sec', emit, alert });
+    const written = (clerk.updateUserMetadata.mock.calls[0] as any)[1].publicMetadata;
+    expect(written.tier).toBe('team');
+    expect(written).not.toHaveProperty('allowed_counties');
+  });
+
+  it('Pro without a selected county → does NOT clobber (no allowed_counties written)', async () => {
+    const s = fakeStripe({});
+    const clerk = fakeClerk(); const alert = vi.fn();
+    const body = evt('customer.subscription.created', { id: 'sub_9', customer: 'cus_1', status: 'trialing', items: { data: [{ price: { id: PRICE_PRO } }] }, metadata: { clerk_user_id: 'user_p' } });
+    await handleWebhook({ stripe: s as any, clerk: clerk as any, body, sig: 'x', secret: 'sec', emit, alert });
+    const written = (clerk.updateUserMetadata.mock.calls[0] as any)[1].publicMetadata;
+    expect(written.tier).toBe('pro');
+    expect(written).not.toHaveProperty('allowed_counties');
   });
 });
