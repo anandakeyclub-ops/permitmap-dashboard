@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { apiFetch } from '../../lib/api';
+import { filterByKeywords } from '../../lib/search';
 import { isCountyLocked, defaultEntitledCounty, upgradeMessageForCounty } from '../../lib/entitlement';
 import CallList from './_components/CallList';
 import DigestCard from './_components/DigestCard';
@@ -16,7 +17,7 @@ import {
 } from 'recharts';
 import {
   MapPin, TrendingUp, Zap, Building2, Target,
-  ChevronRight, Star, AlertCircle, Lock
+  ChevronRight, Star, AlertCircle, Lock, X
 } from 'lucide-react';
 
 // API base + auth lives in lib/api.ts (apiFetch attaches the Clerk JWT when available).
@@ -111,6 +112,7 @@ export default function Dashboard() {
   const [loading, setLoading]       = useState(true);
   const [activeTab, setActiveTab]   = useState<'opportunities' | 'permits' | 'trends' | 'insights' | 'saved'>('opportunities');
   const [tradeFilter, setTradeFilter] = useState('');
+  const [search, setSearch]         = useState('');
   const [upgrade, setUpgrade] = useState<
     { trigger: 'locked_county' | 'get_full_access_button'; county: any | null } | null
   >(null);
@@ -209,9 +211,12 @@ export default function Dashboard() {
   // preview_locked=true and zero rows. Never trust client metadata for gating.
   const isPreview = summary?.preview_locked === true;
 
-  const filteredPermits = tradeFilter
-    ? permits.filter(p => p.trade === tradeFilter)
-    : permits;
+  // Keyword search runs over the already-authorized, trade-filtered permit list (client-side;
+  // preserves county/trade/entitlement filters). Blank query → all currently filtered results.
+  const filteredPermits = filterByKeywords(
+    tradeFilter ? permits.filter(p => p.trade === tradeFilter) : permits,
+    search,
+  );
 
   const tradeChartData = summary?.trade_breakdown
     ? Object.entries(summary.trade_breakdown).map(([trade, count]) => ({
@@ -518,6 +523,34 @@ export default function Dashboard() {
                     ))}
                   </div>
 
+                  {/* Keyword search — client-side over the already-authorized permit list */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+                    <div style={{ position: 'relative', flex: 1, minWidth: 260 }}>
+                      <input
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        placeholder="Search permits, descriptions, contractors, addresses…"
+                        aria-label="Search permits"
+                        style={{
+                          width: '100%', padding: '9px 34px 9px 12px', borderRadius: 8,
+                          background: '#0d1529', border: '1px solid #1e293b', color: '#e2e8f0',
+                          fontSize: 13, outline: 'none',
+                        }}
+                      />
+                      {search && (
+                        <button onClick={() => setSearch('')} aria-label="Clear search" style={{
+                          position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                          background: 'transparent', border: 'none', cursor: 'pointer',
+                          color: '#475569', padding: 2, display: 'inline-flex' }}>
+                          <X size={16} />
+                        </button>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>
+                      {filteredPermits.length} {filteredPermits.length === 1 ? 'match' : 'matches'}
+                    </span>
+                  </div>
+
                   {/* Permits table */}
                   <div style={{ background: '#111827', border: '1px solid #1e293b',
                     borderRadius: 12, overflow: 'hidden' }}>
@@ -582,7 +615,9 @@ export default function Dashboard() {
                     </table>
                     {filteredPermits.length === 0 && (
                       <div style={{ padding: 40, textAlign: 'center', color: '#475569' }}>
-                        No permits found for this filter.
+                        {search
+                          ? 'No permits match your search and current filters.'
+                          : 'No permits found for this filter.'}
                       </div>
                     )}
                     {tier === 'starter' && permits.length >= 50 && (
