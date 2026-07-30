@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { apiFetch } from '../../lib/api';
+import { isCountyLocked, defaultEntitledCounty, upgradeMessageForCounty } from '../../lib/entitlement';
 import CallList from './_components/CallList';
 import DigestCard from './_components/DigestCard';
 import UpgradeModal from './_components/UpgradeModal';
@@ -98,6 +99,8 @@ export default function Dashboard() {
   // No paid tier metadata = Preview (the only free/unpaid state). Never default to Starter.
   const tier = (user?.publicMetadata?.tier as string) || 'preview';
   const limits = TIER_LIMITS[tier] || TIER_LIMITS.preview;
+  // Authoritative entitlement for the selector: which specific counties this user may open.
+  const allowedCounties = (user?.publicMetadata?.allowed_counties as string[]) || [];
 
   const [counties, setCounties]     = useState<any[]>([]);
   const [county, setCounty]         = useState('');  // '' until resolved (localStorage / Clerk metadata) or user picks
@@ -157,10 +160,13 @@ export default function Dashboard() {
         const meta = (user.publicMetadata?.county as string) || '';   // returning user
         resolved = meta || (await promoteSignupCounty().catch(() => null)) || ''; // new signup
       }
+      // Fall back to the first county the user is actually entitled to — so the dashboard
+      // never defaults to (or strands the user behind) a locked county.
+      if (!resolved) resolved = defaultEntitledCounty(counties, tier, allowedCounties);
       if (resolved && !cancelled) setCounty(resolved.trim().toLowerCase().replace(/-/g, '_'));
     })();
     return () => { cancelled = true; };
-  }, [user, county]);
+  }, [user, county, counties, tier]);
 
   // First-login onboarding (PART C): shown until dismissed (publicMetadata.firstLogin === false).
   useEffect(() => {
@@ -215,7 +221,10 @@ export default function Dashboard() {
       }))
     : [];
 
-  const isLocked = (countyIndex: number) => countyIndex >= limits.counties;
+  // Entitlement-based lock (NOT list position × tier count): a county is locked iff the user
+  // is not entitled to it. Fixes entitled counties (e.g. Marion) rendering locked and
+  // non-entitled counties rendering available.
+  const isLocked = (c: { key: string }) => isCountyLocked(c.key, tier, allowedCounties);
 
   return (
     <div style={{
@@ -288,8 +297,8 @@ export default function Dashboard() {
             color: '#475569', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
             Counties
           </div>
-          {counties.map((c, i) => {
-            const locked = isLocked(i);
+          {counties.map((c) => {
+            const locked = isLocked(c);
             const active = c.key === county;
             return (
               <button key={c.key} onClick={() => (locked ? openUpgrade(c) : selectCounty(c.key))}
@@ -339,8 +348,8 @@ export default function Dashboard() {
                 </p>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center', maxWidth: 600 }}>
-                {counties.map((c, i) => {
-                  const locked = isLocked(i);
+                {counties.map((c) => {
+                  const locked = isLocked(c);
                   return (
                     <button key={c.key} onClick={() => (locked ? openUpgrade(c) : selectCounty(c.key))}
                       style={{
@@ -713,6 +722,11 @@ export default function Dashboard() {
           countyKey={upgrade.county?.key}
           countyLabel={upgrade.county?.label}
           countyCount={upgrade.county?.count}
+          entitlementNote={upgrade.trigger === 'locked_county'
+            ? upgradeMessageForCounty(
+                upgrade.county?.label,
+                counties.filter(c => !isCountyLocked(c.key, tier, allowedCounties)).map(c => c.label))
+            : undefined}
           tier={tier}
           limits={limits}
           userId={user?.id}
