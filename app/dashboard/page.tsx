@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { apiFetch } from '../../lib/api';
 import { filterByKeywords } from '../../lib/search';
+import { buildPermitCsv, createExportFilename } from '../../lib/csv';
 import { isCountyLocked, defaultEntitledCounty, upgradeMessageForCounty } from '../../lib/entitlement';
 import CallList from './_components/CallList';
 import DigestCard from './_components/DigestCard';
@@ -217,6 +218,24 @@ export default function Dashboard() {
     tradeFilter ? permits.filter(p => p.trade === tradeFilter) : permits,
     search,
   );
+
+  // Export exactly the currently-visible (filtered + entitlement-authorized) rows. CSV
+  // serialization is pure (lib/csv); only the browser download trigger lives here. Never
+  // fetches or introduces additional records.
+  const exportCsv = () => {
+    if (filteredPermits.length === 0) return;
+    const csv = buildPermitCsv(filteredPermits);
+    const filename = createExportFilename(
+      { county, trade: tradeFilter, keyword: search },
+      new Date().toISOString().slice(0, 10),
+    );
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   const tradeChartData = summary?.trade_breakdown
     ? Object.entries(summary.trade_breakdown).map(([trade, count]) => ({
@@ -549,6 +568,22 @@ export default function Dashboard() {
                     <span style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>
                       {filteredPermits.length} {filteredPermits.length === 1 ? 'match' : 'matches'}
                     </span>
+                    <button
+                      onClick={exportCsv}
+                      disabled={filteredPermits.length === 0}
+                      aria-label="Export CSV"
+                      style={{
+                        padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                        cursor: filteredPermits.length === 0 ? 'not-allowed' : 'pointer',
+                        background: filteredPermits.length === 0 ? 'transparent' : '#1e3a5f',
+                        border: `1px solid ${filteredPermits.length === 0 ? '#1e293b' : '#2563eb'}`,
+                        color: filteredPermits.length === 0 ? '#475569' : '#93c5fd',
+                      }}>
+                      {filteredPermits.length === 0
+                        ? 'No results to export'
+                        : `Export CSV (${filteredPermits.length})`}
+                    </button>
                   </div>
 
                   {/* Permits table */}
