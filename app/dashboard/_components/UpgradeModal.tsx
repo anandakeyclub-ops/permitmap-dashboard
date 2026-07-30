@@ -38,12 +38,13 @@ function money(v: any): string {
 }
 
 export default function UpgradeModal({
-  countyKey, countyLabel, countyCount, tier, limits, userId, getToken, onClose,
+  countyKey, countyLabel, countyCount, entitlementNote, tier, limits, userId, getToken, onClose,
   trigger = 'locked_county',
 }: {
   countyKey?: string;              // optional — absent when opened generically
   countyLabel?: string;
   countyCount?: number;            // fallback permit count from /counties
+  entitlementNote?: string;        // D: explains what the trial/plan currently includes
   tier: string;
   limits: { counties: number; permits: number; label: string };
   userId?: string | null;
@@ -165,6 +166,13 @@ export default function UpgradeModal({
             <X size={20} />
           </button>
         </div>
+
+        {/* D: explain the current entitlement instead of a bare "Upgrade". */}
+        {entitlementNote && (
+          <p style={{ margin: '12px 0 0', fontSize: 13, lineHeight: 1.5, color: '#cbd5e1' }}>
+            {entitlementNote}
+          </p>
+        )}
 
         {/* What they're trying to access */}
         <div style={{ margin: '16px 0', padding: '14px 16px', borderRadius: 12,
