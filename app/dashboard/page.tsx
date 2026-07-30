@@ -5,6 +5,7 @@ import { useUser, useAuth } from '@clerk/nextjs';
 import { apiFetch } from '../../lib/api';
 import { filterByKeywords } from '../../lib/search';
 import { buildPermitCsv, createExportFilename } from '../../lib/csv';
+import { sortPermits, SORT_OPTIONS, type SortOption } from '../../lib/sort';
 import { isCountyLocked, defaultEntitledCounty, upgradeMessageForCounty } from '../../lib/entitlement';
 import CallList from './_components/CallList';
 import DigestCard from './_components/DigestCard';
@@ -118,6 +119,7 @@ export default function Dashboard() {
     { trigger: 'locked_county' | 'get_full_access_button'; county: any | null } | null
   >(null);
   const [showWelcome, setShowWelcome] = useState(false);
+  const [sortOption, setSortOption]   = useState<SortOption>(''); // '' = current server order (default)
 
   // Locked county click → record the lock view and open the upgrade modal
   // (instead of silently doing nothing). The modal fires upgrade_modal_open itself.
@@ -219,12 +221,17 @@ export default function Dashboard() {
     search,
   );
 
-  // Export exactly the currently-visible (filtered + entitlement-authorized) rows. CSV
+  // Sorting runs LAST in the pipeline, over the already-filtered/authorized set. The same
+  // array feeds the visible rows AND the CSV export so on-screen order matches the file.
+  // Default ('') preserves the current server-returned order. Pure; never mutates/​fetches.
+  const displayedPermits = sortPermits(filteredPermits, sortOption);
+
+  // Export exactly the currently-visible (filtered + sorted + entitlement-authorized) rows. CSV
   // serialization is pure (lib/csv); only the browser download trigger lives here. Never
   // fetches or introduces additional records.
   const exportCsv = () => {
-    if (filteredPermits.length === 0) return;
-    const csv = buildPermitCsv(filteredPermits);
+    if (displayedPermits.length === 0) return;
+    const csv = buildPermitCsv(displayedPermits);
     const filename = createExportFilename(
       { county, trade: tradeFilter, keyword: search },
       new Date().toISOString().slice(0, 10),
@@ -565,6 +572,19 @@ export default function Dashboard() {
                         </button>
                       )}
                     </div>
+                    <select
+                      value={sortOption}
+                      onChange={e => setSortOption(e.target.value as SortOption)}
+                      aria-label="Sort permits"
+                      style={{
+                        padding: '9px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                        background: '#0d1529', border: '1px solid #1e293b', color: '#93c5fd',
+                        cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}>
+                      {SORT_OPTIONS.map(o => (
+                        <option key={o.value} value={o.value} style={{ background: '#0d1529' }}>{o.label}</option>
+                      ))}
+                    </select>
                     <span style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>
                       {filteredPermits.length} {filteredPermits.length === 1 ? 'match' : 'matches'}
                     </span>
@@ -600,7 +620,7 @@ export default function Dashboard() {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredPermits.slice(0, 50).map((p, i) => (
+                        {displayedPermits.slice(0, 50).map((p, i) => (
                           <tr key={i} style={{
                             borderBottom: '1px solid #0f172a',
                             background: i % 2 === 0 ? '#111827' : '#0d1529',
