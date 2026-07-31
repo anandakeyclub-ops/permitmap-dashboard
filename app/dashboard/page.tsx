@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { apiFetch } from '../../lib/api';
 import { filterByKeywords } from '../../lib/search';
@@ -10,6 +10,7 @@ import { isCountyLocked, defaultEntitledCounty, upgradeMessageForCounty } from '
 import CallList from './_components/CallList';
 import DigestCard from './_components/DigestCard';
 import UpgradeModal from './_components/UpgradeModal';
+import PermitDrawer from './_components/PermitDrawer';
 import { track } from '../../lib/analytics';
 import { startCheckout } from '../../lib/start-checkout';
 import SavedLeads from './_components/SavedLeads';
@@ -120,6 +121,8 @@ export default function Dashboard() {
   >(null);
   const [showWelcome, setShowWelcome] = useState(false);
   const [sortOption, setSortOption]   = useState<SortOption>(''); // '' = current server order (default)
+  const [selectedPermit, setSelectedPermit] = useState<any | null>(null); // read-only detail drawer
+  const rowRef = useRef<HTMLTableRowElement | null>(null);               // return focus here on close
 
   // Locked county click → record the lock view and open the upgrade modal
   // (instead of silently doing nothing). The modal fires upgrade_modal_open itself.
@@ -621,9 +624,20 @@ export default function Dashboard() {
                       </thead>
                       <tbody>
                         {displayedPermits.slice(0, 50).map((p, i) => (
-                          <tr key={i} style={{
+                          <tr key={i}
+                            tabIndex={0}
+                            role="button"
+                            aria-label="View permit details"
+                            onClick={e => { rowRef.current = e.currentTarget; setSelectedPermit(p); }}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault(); rowRef.current = e.currentTarget; setSelectedPermit(p);
+                              }
+                            }}
+                            style={{
                             borderBottom: '1px solid #0f172a',
                             background: i % 2 === 0 ? '#111827' : '#0d1529',
+                            cursor: 'pointer',
                           }}>
                             <td style={{ padding: '12px 16px' }}>
                               <div style={{
@@ -822,6 +836,13 @@ export default function Dashboard() {
           userId={user?.id}
           getToken={getToken}
           onClose={() => setUpgrade(null)}
+        />
+      )}
+
+      {selectedPermit && (
+        <PermitDrawer
+          permit={selectedPermit}
+          onClose={() => { setSelectedPermit(null); rowRef.current?.focus(); }}
         />
       )}
 
