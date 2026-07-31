@@ -14,6 +14,9 @@
 const SEARCH_FIELDS: string[][] = [
   ['PERMIT_DESCRIPTION', 'permit_description', 'description'],
   ['WORK_DESCRIPTION', 'work_description'],
+  // Permit type / record type — curated vocabulary (e.g. "Residential Generator"). Some counties
+  // carry the meaningful term here, not only in the description, so include it in the index.
+  ['RECORD_TYPE', 'record_type', 'permit_type'],
   ['CONTRACTOR_NAME', 'contractor_name', 'contractor'],
   ['OWNER_NAME', 'owner_name', 'owner'],
   ['FULL_ADDRESS', 'full_address', 'address'],
