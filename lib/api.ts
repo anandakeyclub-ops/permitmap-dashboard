@@ -11,6 +11,7 @@
 import type {
   SavedLead, SavedLeadStatus, SavedLeadCounts, PermitRow,
 } from './types';
+import { buildSaveLeadPayload } from './saveLeadState';
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || 'https://permitmap-api.onrender.com';
@@ -70,15 +71,7 @@ export async function saveLead(
   getToken: GetToken,
   permit: PermitRow,
 ): Promise<{ lead: SavedLead | null; already_saved: boolean }> {
-  const body = {
-    permit_id:   String(permit.PERMITNO ?? ''),
-    county:      String(permit.county ?? ''),
-    address:     String(permit.FULL_ADDRESS ?? permit.full_address ?? ''),
-    trade:       permit.trade ?? null,
-    value:       permit.FINAL_VALUATION ?? permit.final_valuation ?? null,
-    permit_date: permit.LAST_ISSUED_DATE ?? permit.last_issued_date ?? null,
-    score:       permit.score ?? null,
-  };
+  const body = buildSaveLeadPayload(permit); // shared builder — identical payload to before
   const res = await apiFetch('/saved-leads', getToken, { method: 'POST', body });
   if (res.status === 409) {
     const data = await res.json().catch(() => ({} as any));
