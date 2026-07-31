@@ -87,3 +87,45 @@ describe('filterByKeywords (reused by CSV export)', () => {
     expect(filterByKeywords(input, '')).toEqual(input);     // clear → original set
   });
 });
+
+describe('permit type (RECORD_TYPE) is searchable — the audited gap', () => {
+  // Mirrors the real Marion served shape: the term lives in RECORD_TYPE; PERMIT_DESCRIPTION is
+  // terse/empty. Before this change these permits were unreachable by a "generator" search.
+  const marionGen = {
+    PERMITNO: 'BLDR-26-07-19632', RECORD_TYPE: 'Residential Generator',
+    PERMIT_DESCRIPTION: '', CONTRACTOR_NAME: '', OWNER_NAME: '',
+    FULL_ADDRESS: '13131 SW 52ND LANE RD OCALA', trade: 'electrical',
+  };
+  const roofType = {
+    PERMITNO: 'BLDR-26-07-19180', RECORD_TYPE: 'Residential Roof',
+    PERMIT_DESCRIPTION: '', FULL_ADDRESS: '5325 SW 129TH TERRACE RD OCALA', trade: 'roofing',
+  };
+
+  it('searching "Residential Generator" (full permit type) matches', () => {
+    expect(matchesKeywords(marionGen, 'Residential Generator')).toBe(true);
+  });
+  it('searching "Generator" matches a permit typed only in RECORD_TYPE', () => {
+    expect(matchesKeywords(marionGen, 'generator')).toBe(true);   // was previously MISSED
+  });
+  it('searching another permit type matches (e.g. "residential roof")', () => {
+    expect(matchesKeywords(roofType, 'residential roof')).toBe(true);
+    expect(matchesKeywords(roofType, 'generator')).toBe(false);   // no cross-type false positive
+  });
+  it('accepts lowercase fallbacks record_type / permit_type', () => {
+    expect(matchesKeywords({ record_type: 'Residential Generator' }, 'generator')).toBe(true);
+    expect(matchesKeywords({ permit_type: 'Standby Generator' }, 'standby')).toBe(true);
+  });
+  it('filters a Marion-like set by permit type without touching other fields', () => {
+    const set = [marionGen, roofType];
+    expect(filterByKeywords(set, 'generator').map(p => p.PERMITNO)).toEqual(['BLDR-26-07-19632']);
+    expect(filterByKeywords(set, 'residential').map(p => p.PERMITNO))
+      .toEqual(['BLDR-26-07-19632', 'BLDR-26-07-19180']); // both are "Residential …"
+  });
+  it('regression: description / contractor / address / owner searches still work unchanged', () => {
+    expect(matchesKeywords(P.gen, 'standby')).toBe(true);      // PERMIT_DESCRIPTION
+    expect(matchesKeywords(P.gen, 'supercenter')).toBe(true);  // CONTRACTOR_NAME
+    expect(matchesKeywords(P.gen, 'ocala')).toBe(true);        // FULL_ADDRESS
+    expect(matchesKeywords(P.roof, 'john smith')).toBe(true);  // OWNER_NAME
+    expect(matchesKeywords(P.gen, 'bld-2026-00915')).toBe(true); // PERMITNO
+  });
+});
