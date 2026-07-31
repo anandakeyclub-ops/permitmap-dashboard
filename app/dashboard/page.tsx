@@ -604,7 +604,7 @@ export default function Dashboard() {
 
                   {/* Keyword search — client-side over the already-authorized permit list */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-                    <div style={{ position: 'relative', flex: 1, minWidth: 260 }}>
+                    <div className="pm-permits-search" style={{ position: 'relative' }}>
                       <input
                         value={search}
                         onChange={e => setSearch(e.target.value)}
@@ -676,7 +676,8 @@ export default function Dashboard() {
                   {/* Permits table */}
                   <div style={{ background: '#111827', border: '1px solid #1e293b',
                     borderRadius: 12, overflow: 'hidden' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <div className="pm-table-scroll">
+                    <table className="pm-permits-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
                         <tr style={{ borderBottom: '1px solid #1e293b' }}>
                           {([
@@ -778,6 +779,7 @@ export default function Dashboard() {
                         ))}
                       </tbody>
                     </table>
+                    </div>
                     {displayedPermits.length > 0 && (
                       <div style={{ padding: '12px 20px', borderTop: '1px solid #1e293b',
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
