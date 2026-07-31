@@ -30,3 +30,45 @@
   /* Search takes its own full-width line instead of forcing a 260px min-width that overflows. */
   .pm-permits-search { flex-basis: 100%; min-width: 0; }
 }
+
+/* ── Design tokens (PR #1) ──────────────────────────────────────────────────
+   Canonical --pm-* custom properties, mirrored 1:1 by lib/designTokens.ts.
+   NOT yet referenced by any selector — adopted surface-by-surface in later PRs,
+   so this block changes nothing that renders today. */
+:root {
+  --pm-background-base:   #0a0f1e;
+  --pm-background-raised: #111827;
+  --pm-background-panel:  #0d1529;
+  --pm-background-hover:  #172033;
+  --pm-border-default:    #1e293b;
+  --pm-border-strong:     #334155;
+  --pm-text-primary:      #e2e8f0;
+  --pm-text-secondary:    #94a3b8;
+  --pm-text-muted:        #64748b;
+  --pm-accent-primary:    #2563eb;
+  --pm-accent-hover:      #3b82f6;
+  --pm-accent-soft:       #1e3a5f;
+  --pm-accent-on-soft:    #93c5fd;
+  --pm-success:           #22c55e;
+  --pm-warning:           #f59e0b;
+  --pm-danger:            #ef4444;
+  --pm-danger-soft:       #7f1d1d;
+  --pm-focus-ring:        #93c5fd;
+
+  --pm-space-xs:  4px;
+  --pm-space-sm:  8px;
+  --pm-space-md:  12px;
+  --pm-space-lg:  16px;
+  --pm-space-xl:  20px;
+  --pm-space-2xl: 24px;
+
+  --pm-radius-sm:   6px;
+  --pm-radius-md:   8px;
+  --pm-radius-lg:   12px;
+  --pm-radius-full: 50%;
+  --pm-radius-pill: 9999px;
+
+  --pm-font-family:   'DM Sans', system-ui, sans-serif;
+  --pm-weight-medium: 600;
+  --pm-weight-bold:   700;
+}
