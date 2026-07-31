@@ -96,3 +96,31 @@ export function sortPermits<T extends Record<string, any>>(rows: T[], option: So
     })
     .map(x => x.row);
 }
+
+// ── Click-to-sort table headers ──────────────────────────────────────────────
+// Only columns with an existing comparator are sortable. Date/Value toggle between their two
+// directions (starting descending); Address is ascending-only because no `address_desc`
+// comparator exists — repeated clicks stay ascending (we never invent a descending address sort).
+export type SortColumn = 'date' | 'value' | 'address';
+
+/** Next `sortOption` after clicking a sortable header, given the current option. */
+export function nextSortForColumn(column: SortColumn, current: SortOption): SortOption {
+  switch (column) {
+    case 'date':    return current === 'newest' ? 'oldest' : 'newest';
+    case 'value':   return current === 'value_desc' ? 'value_asc' : 'value_desc';
+    case 'address': return 'address_asc';
+    default:        return current;
+  }
+}
+
+/** Header sort indicator for aria-sort + the arrow glyph. 'none' when this column isn't active. */
+export function sortIndicatorForColumn(
+  column: SortColumn, current: SortOption,
+): 'ascending' | 'descending' | 'none' {
+  switch (column) {
+    case 'date':    return current === 'newest' ? 'descending' : current === 'oldest' ? 'ascending' : 'none';
+    case 'value':   return current === 'value_desc' ? 'descending' : current === 'value_asc' ? 'ascending' : 'none';
+    case 'address': return current === 'address_asc' ? 'ascending' : 'none';
+    default:        return 'none';
+  }
+}

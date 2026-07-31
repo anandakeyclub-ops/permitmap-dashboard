@@ -5,7 +5,8 @@ import { useUser, useAuth } from '@clerk/nextjs';
 import { apiFetch } from '../../lib/api';
 import { filterByKeywords } from '../../lib/search';
 import { buildPermitCsv, createExportFilename } from '../../lib/csv';
-import { sortPermits, SORT_OPTIONS, type SortOption } from '../../lib/sort';
+import { sortPermits, SORT_OPTIONS, nextSortForColumn, sortIndicatorForColumn, type SortOption, type SortColumn } from '../../lib/sort';
+import { INITIAL_VISIBLE, shownCount, shouldShowLoadMore, nextVisibleCount } from '../../lib/tableView';
 import { isCountyLocked, defaultEntitledCounty, upgradeMessageForCounty } from '../../lib/entitlement';
 import CallList from './_components/CallList';
 import DigestCard from './_components/DigestCard';
@@ -21,7 +22,7 @@ import {
 } from 'recharts';
 import {
   MapPin, TrendingUp, Zap, Building2, Target,
-  ChevronRight, Star, AlertCircle, Lock, X
+  ChevronRight, ChevronUp, ChevronDown, Star, AlertCircle, Lock, X
 } from 'lucide-react';
 
 // API base + auth lives in lib/api.ts (apiFetch attaches the Clerk JWT when available).
@@ -124,6 +125,12 @@ export default function Dashboard() {
   const [sortOption, setSortOption]   = useState<SortOption>(''); // '' = current server order (default)
   const [selectedPermit, setSelectedPermit] = useState<any | null>(null); // read-only detail drawer
   const rowRef = useRef<HTMLTableRowElement | null>(null);               // return focus here on close
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);     // "Load more" — +50 per click
+
+  // Reset the visible window whenever the result set meaningfully changes (county / trade / search /
+  // sort). Applying a saved search flows through these state setters, so it resets too. Opening or
+  // closing the drawer does NOT touch these deps, so it never resets the window.
+  useEffect(() => { setVisibleCount(INITIAL_VISIBLE); }, [county, tradeFilter, search, sortOption]);
 
   // Locked county click → record the lock view and open the upgrade modal
   // (instead of silently doing nothing). The modal fires upgrade_modal_open itself.
@@ -630,15 +637,47 @@ export default function Dashboard() {
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
                         <tr style={{ borderBottom: '1px solid #1e293b' }}>
-                          {['Score', 'Address', 'Type', 'Trade', 'Value', 'Date'].map(h => (
-                            <th key={h} style={{ padding: '12px 16px', textAlign: 'left',
-                              fontSize: 11, color: '#475569', fontWeight: 700,
-                              textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
-                          ))}
+                          {([
+                            { label: 'Score' },
+                            { label: 'Address', column: 'address' as SortColumn },
+                            { label: 'Type' },
+                            { label: 'Trade' },
+                            { label: 'Value', column: 'value' as SortColumn },
+                            { label: 'Date', column: 'date' as SortColumn },
+                          ]).map(h => {
+                            const thStyle = {
+                              padding: '12px 16px', textAlign: 'left' as const,
+                              fontSize: 11, fontWeight: 700,
+                              textTransform: 'uppercase' as const, letterSpacing: '0.06em',
+                            };
+                            if (!h.column) {
+                              return <th key={h.label} style={{ ...thStyle, color: '#475569' }}>{h.label}</th>;
+                            }
+                            const indicator = sortIndicatorForColumn(h.column, sortOption); // 'ascending' | 'descending' | 'none'
+                            const active = indicator !== 'none';
+                            return (
+                              <th key={h.label} style={{ ...thStyle, color: active ? '#93c5fd' : '#475569' }} aria-sort={indicator}>
+                                <button
+                                  type="button"
+                                  onClick={() => setSortOption(nextSortForColumn(h.column, sortOption))}
+                                  aria-label={`Sort by ${h.label}`}
+                                  style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                                    background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+                                    color: 'inherit', fontSize: 'inherit', fontWeight: 'inherit',
+                                    textTransform: 'inherit', letterSpacing: 'inherit',
+                                  }}>
+                                  {h.label}
+                                  {indicator === 'descending' && <ChevronDown size={12} aria-hidden="true" />}
+                                  {indicator === 'ascending' && <ChevronUp size={12} aria-hidden="true" />}
+                                </button>
+                              </th>
+                            );
+                          })}
                         </tr>
                       </thead>
                       <tbody>
-                        {displayedPermits.slice(0, 50).map((p, i) => (
+                        {displayedPermits.slice(0, visibleCount).map((p, i) => (
                           <tr key={i}
                             tabIndex={0}
                             role="button"
@@ -697,6 +736,26 @@ export default function Dashboard() {
                         ))}
                       </tbody>
                     </table>
+                    {displayedPermits.length > 0 && (
+                      <div style={{ padding: '12px 20px', borderTop: '1px solid #1e293b',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                        <span style={{ fontSize: 12, color: '#64748b' }}>
+                          Showing {shownCount(visibleCount, displayedPermits.length)} of {displayedPermits.length}
+                        </span>
+                        {shouldShowLoadMore(visibleCount, displayedPermits.length) && (
+                          <button
+                            type="button"
+                            onClick={() => setVisibleCount(c => nextVisibleCount(c, displayedPermits.length))}
+                            style={{
+                              padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                              whiteSpace: 'nowrap', cursor: 'pointer',
+                              background: '#1e3a5f', border: '1px solid #2563eb', color: '#93c5fd',
+                            }}>
+                            Load more
+                          </button>
+                        )}
+                      </div>
+                    )}
                     {filteredPermits.length === 0 && (
                       <div style={{ padding: 40, textAlign: 'center', color: '#475569' }}>
                         {search
