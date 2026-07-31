@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useEffect, useRef } from 'react';
-import { X } from 'lucide-react';
+import { X, Star } from 'lucide-react';
 import { PERMIT_DETAIL_FIELDS, formatPermitField } from '../../../lib/permitDetail';
 import { getContractorName } from '../../../lib/contractorProfile';
 
@@ -13,13 +13,23 @@ import { getContractorName } from '../../../lib/contractorProfile';
 // The Contractor value is a button when a contractor name exists (opens the read-only Contractor
 // Profile via onOpenContractor); it stays a plain em dash when absent. When the drawer re-opens
 // after the profile closes, `focusContractorOnMount` returns focus to that button.
+//
+// The only mutation is the existing Saved Leads "Save lead" action (same backend/identity as the
+// Opportunities star). Presentational: the parent owns saved/saving state and the save handler;
+// the button renders when `canSave` (paid tier) and is disabled once `saved` or `saving`.
 export default function PermitDrawer({
   permit, onClose, onOpenContractor, focusContractorOnMount,
+  canSave, saved, saving, saveError, onSaveLead,
 }: {
   permit: Record<string, any>;
   onClose: () => void;
   onOpenContractor?: (contractorName: string) => void;
   focusContractorOnMount?: boolean;
+  canSave?: boolean;
+  saved?: boolean;
+  saving?: boolean;
+  saveError?: boolean;
+  onSaveLead?: () => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const contractorBtnRef = useRef<HTMLButtonElement>(null);
@@ -64,6 +74,41 @@ export default function PermitDrawer({
             <X size={20} />
           </button>
         </div>
+
+        {/* Save lead — the existing Saved Leads action, surfaced here. Only for eligible (paid)
+            users; disabled once saved or while saving. Removal stays in the Saved tab. */}
+        {canSave && (
+          <div style={{ marginBottom: 18 }}>
+            <button
+              type="button"
+              onClick={saved || saving ? undefined : onSaveLead}
+              disabled={saved || saving}
+              aria-label={saved ? 'Saved to your leads' : 'Save lead'}
+              aria-live="polite"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                cursor: saved || saving ? 'default' : 'pointer',
+                background: saved ? 'transparent' : '#1e3a5f',
+                border: `1px solid ${saved ? '#facc15' : '#2563eb'}`,
+                color: saved ? '#facc15' : '#93c5fd',
+              }}>
+              {saving ? (
+                <span style={{ width: 14, height: 14, border: '2px solid #1e293b',
+                  borderTop: '2px solid #93c5fd', borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite' }} aria-hidden="true" />
+              ) : (
+                <Star size={16} color={saved ? '#facc15' : '#93c5fd'} fill={saved ? '#facc15' : 'none'} aria-hidden="true" />
+              )}
+              {saving ? 'Saving…' : saved ? 'Saved' : 'Save lead'}
+            </button>
+            {saveError && !saving && !saved && (
+              <div role="alert" style={{ fontSize: 11, color: '#f87171', marginTop: 6 }}>
+                Couldn’t save — try again.
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="pm-drawer-grid">
           {PERMIT_DETAIL_FIELDS.map(f => {

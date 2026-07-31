@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
-import { apiFetch } from '../../lib/api';
+import { apiFetch, getSavedLeads, saveLead } from '../../lib/api';
+import { saveLeadPermitId, canSaveLead, savedIdsAfter } from '../../lib/saveLeadState';
 import { filterByKeywords } from '../../lib/search';
 import { buildPermitCsv, createExportFilename } from '../../lib/csv';
 import { sortPermits, SORT_OPTIONS, nextSortForColumn, sortIndicatorForColumn, type SortOption, type SortColumn } from '../../lib/sort';
@@ -129,6 +130,12 @@ export default function Dashboard() {
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);     // "Load more" — +50 per click
   const [selectedContractor, setSelectedContractor] = useState<string | null>(null); // Contractor Profile (shown instead of the drawer)
   const [focusContractorBtn, setFocusContractorBtn] = useState(false);   // return focus to the contractor button when the profile closes
+  // Existing Saved Leads "save" action, surfaced in the drawer. Reuses the same backend/identity
+  // as the Opportunities star (lib/api.saveLead); page-level state so it survives the drawer
+  // unmount/remount around the Contractor Profile. CallList keeps its own independent star state.
+  const [savedLeadIds, setSavedLeadIds] = useState<Set<string>>(new Set());
+  const [savingLeadId, setSavingLeadId] = useState<string | null>(null);
+  const [saveLeadError, setSaveLeadError] = useState(false);
 
   // Reset the visible window whenever the result set meaningfully changes (county / trade / search /
   // sort). Applying a saved search flows through these state setters, so it resets too. Opening or
@@ -231,6 +238,34 @@ export default function Dashboard() {
   // Phase 1.5: the API is authoritative — a preview (unpaid) caller gets
   // preview_locked=true and zero rows. Never trust client metadata for gating.
   const isPreview = summary?.preview_locked === true;
+
+  // Load the caller's saved-lead permit_ids once (auth-gated; preview/403/network → empty, like
+  // CallList). Drives the drawer's saved/Save-lead state. Independent of CallList's own star state.
+  useEffect(() => {
+    let cancelled = false;
+    getSavedLeads(getToken)
+      .then(d => { if (!cancelled) setSavedLeadIds(new Set((d.leads || []).map(l => l.permit_id))); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [getToken]);
+
+  // Drawer "Save lead" — reuses the exact existing saveLead flow, payload, identity, and dedup.
+  // Paid-only (isPreview guard, defense-in-depth atop the preview-locked Permits table). Never
+  // touches county/search/sort/filters/visibleCount/selectedPermit. Removal stays in the Saved tab.
+  const handleSaveLead = async (permit: any) => {
+    const pid = saveLeadPermitId(permit);
+    if (isPreview || !canSaveLead(pid, savedLeadIds, savingLeadId)) return;
+    setSaveLeadError(false);
+    setSavingLeadId(pid);
+    try {
+      const res = await saveLead(getToken, permit);
+      setSavedLeadIds(prev => savedIdsAfter(prev, pid, res.already_saved ? 'already_saved' : 'success'));
+    } catch {
+      setSaveLeadError(true); // leave unsaved → retry allowed
+    } finally {
+      setSavingLeadId(null);
+    }
+  };
 
   // Keyword search runs over the already-authorized, trade-filtered permit list (client-side;
   // preserves county/trade/entitlement filters). Blank query → all currently filtered results.
@@ -926,6 +961,11 @@ export default function Dashboard() {
           permit={selectedPermit}
           focusContractorOnMount={focusContractorBtn}
           onOpenContractor={name => setSelectedContractor(name)}
+          canSave={!isPreview}
+          saved={savedLeadIds.has(saveLeadPermitId(selectedPermit))}
+          saving={savingLeadId === saveLeadPermitId(selectedPermit)}
+          saveError={saveLeadError}
+          onSaveLead={() => handleSaveLead(selectedPermit)}
           onClose={() => { setSelectedPermit(null); setFocusContractorBtn(false); rowRef.current?.focus(); }}
         />
       )}
