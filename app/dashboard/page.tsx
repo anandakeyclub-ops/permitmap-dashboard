@@ -127,6 +127,7 @@ export default function Dashboard() {
   const [sortOption, setSortOption]   = useState<SortOption>(''); // '' = current server order (default)
   const [selectedPermit, setSelectedPermit] = useState<any | null>(null); // read-only detail drawer
   const rowRef = useRef<HTMLTableRowElement | null>(null);               // return focus here on close
+  const upgradeTriggerRef = useRef<HTMLElement | null>(null);            // return focus to the UpgradeModal opener on close
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);     // "Load more" — +50 per click
   const [selectedContractor, setSelectedContractor] = useState<string | null>(null); // Contractor Profile (shown instead of the drawer)
   const [focusContractorBtn, setFocusContractorBtn] = useState(false);   // return focus to the contractor button when the profile closes
@@ -148,13 +149,17 @@ export default function Dashboard() {
 
   // Locked county click → record the lock view and open the upgrade modal
   // (instead of silently doing nothing). The modal fires upgrade_modal_open itself.
-  const openUpgrade = (c: any) => {
+  const openUpgrade = (c: any, trigger?: HTMLElement | null) => {
+    upgradeTriggerRef.current = trigger ?? null; // remember the opener to restore focus on close
     track(getToken, 'locked_county_view', { county: c.key, source: 'county_sidebar' });
     setUpgrade({ trigger: 'locked_county', county: c });
   };
 
   // "Get Full Access" button → open the modal generically (no specific county).
-  const openFullAccess = () => setUpgrade({ trigger: 'get_full_access_button', county: null });
+  const openFullAccess = (trigger?: HTMLElement | null) => {
+    upgradeTriggerRef.current = trigger ?? null;
+    setUpgrade({ trigger: 'get_full_access_button', county: null });
+  };
 
   // Persist a county choice so the dashboard reopens to it instantly (PART D).
   const selectCounty = (key: string) => {
@@ -352,7 +357,7 @@ export default function Dashboard() {
             {user?.emailAddresses?.[0]?.emailAddress}
           </span>
           {tier !== 'team' && (
-            <button onClick={openFullAccess} style={{
+            <button onClick={e => openFullAccess(e.currentTarget)} style={{
               background: '#2563eb',
               color: '#fff',
               fontSize: 12,
@@ -385,7 +390,7 @@ export default function Dashboard() {
             const locked = isLocked(c);
             const active = c.key === county;
             return (
-              <button key={c.key} onClick={() => (locked ? openUpgrade(c) : selectCounty(c.key))}
+              <button key={c.key} onClick={e => (locked ? openUpgrade(c, e.currentTarget) : selectCounty(c.key))}
                 style={{
                   width: '100%', textAlign: 'left', padding: '10px 16px',
                   background: active ? '#1e3a5f' : 'transparent',
@@ -435,7 +440,7 @@ export default function Dashboard() {
                 {counties.map((c) => {
                   const locked = isLocked(c);
                   return (
-                    <button key={c.key} onClick={() => (locked ? openUpgrade(c) : selectCounty(c.key))}
+                    <button key={c.key} onClick={e => (locked ? openUpgrade(c, e.currentTarget) : selectCounty(c.key))}
                       style={{
                         padding: '10px 16px', borderRadius: 10, cursor: 'pointer',
                         background: locked ? 'transparent' : '#1e3a5f',
@@ -951,7 +956,7 @@ export default function Dashboard() {
           limits={limits}
           userId={user?.id}
           getToken={getToken}
-          onClose={() => setUpgrade(null)}
+          onClose={() => { setUpgrade(null); upgradeTriggerRef.current?.focus(); }}
         />
       )}
 

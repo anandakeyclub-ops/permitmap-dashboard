@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Lock, MapPin, TrendingUp, DollarSign, Building2, Check } from 'lucide-react';
+import { handleDialogTab } from '../../../lib/dialogFocus';
 import { apiFetch } from '../../../lib/api';
 import { type Plan } from '../../../lib/checkout';
 import { startCheckout } from '../../../lib/start-checkout';
@@ -81,10 +82,16 @@ export default function UpgradeModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Close on Escape.
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Close on Escape; trap Tab/Shift+Tab within the dialog; move focus into the panel on open.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); return; }
+      handleDialogTab(panelRef.current, e);
+    };
     window.addEventListener('keydown', onKey);
+    panelRef.current?.focus();
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
@@ -138,7 +145,7 @@ export default function UpgradeModal({
           z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
         .pm-upg-dialog { background: #0d1529; border: 1px solid #1e293b; border-radius: 16px;
           width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto;
-          padding: 24px 26px; box-shadow: 0 24px 64px rgba(0,0,0,0.55); }
+          padding: 24px 26px; box-shadow: 0 24px 64px rgba(0,0,0,0.55); outline: none; }
         @media (max-width: 640px) {
           .pm-upg-overlay { padding: 0; }
           .pm-upg-dialog { max-width: 100%; max-height: 100vh; height: 100vh;
@@ -146,6 +153,8 @@ export default function UpgradeModal({
         }
       `}</style>
       <div
+        ref={panelRef}
+        tabIndex={-1}
         onClick={e => e.stopPropagation()}
         role="dialog" aria-modal="true" aria-label="Upgrade"
         className="pm-upg-dialog"
