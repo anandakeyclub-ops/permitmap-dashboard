@@ -64,7 +64,8 @@ export default function DashboardLoadingSkeleton() {
 
       {/* Permits-style table surface: real header labels + 7 skeleton rows */}
       <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, overflow: 'hidden' }}>
-        <table aria-hidden="true" style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="pm-table-scroll">
+        <table aria-hidden="true" className="pm-permits-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #1e293b' }}>
               {TABLE_HEADERS.map(h => (
@@ -88,6 +89,7 @@ export default function DashboardLoadingSkeleton() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

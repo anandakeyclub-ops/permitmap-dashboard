@@ -19,3 +19,14 @@
 @media (prefers-reduced-motion: reduce) {
   .pm-skel { animation: none; }
 }
+
+/* Mobile overflow fix (permits tab). Desktop behavior is unchanged — these mirror the previous
+   inline values; only the <=640px media query alters layout. */
+.pm-permits-search { flex: 1; min-width: 260px; }   /* was inline flex:1 / min-width:260 */
+.pm-table-scroll   { overflow-x: auto; }             /* horizontal-scroll container for the table */
+.pm-permits-table  { min-width: 720px; }             /* keep all six columns legible; scroll under this */
+
+@media (max-width: 640px) {
+  /* Search takes its own full-width line instead of forcing a 260px min-width that overflows. */
+  .pm-permits-search { flex-basis: 100%; min-width: 0; }
+}
