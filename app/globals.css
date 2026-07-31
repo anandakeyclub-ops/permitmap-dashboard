@@ -1,0 +1,8 @@
+/* App-global styles. Intentionally minimal — this exists so the spinner keyframe is available
+   everywhere, independent of any component being mounted. Previously `@keyframes spin` lived in a
+   <style> block inside app/dashboard/page.tsx, so every spinner silently depended on that page
+   being rendered. The keyframe now lives here (imported once in app/layout.tsx). Spinners keep
+   their own inline size/border/color/speed via `animation: spin <duration> linear infinite`. */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
