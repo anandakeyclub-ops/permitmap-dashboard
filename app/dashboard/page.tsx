@@ -989,7 +989,7 @@ export default function Dashboard() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&display=swap');
         * { box-sizing: border-box; }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        /* @keyframes spin now lives in app/globals.css (app-global; no longer tied to this page) */
         /* Visible keyboard focus (WCAG 2.4.7). :focus-visible = keyboard only, so mouse clicks
            stay ring-free. !important overrides the inline outline:none on the search / saved-search
            inputs. Uses the existing blue accent; outline never affects layout. */

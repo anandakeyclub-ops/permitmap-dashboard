@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { ClerkProvider } from '@clerk/nextjs';
+import './globals.css'; // app-global styles (spinner keyframe) — see app/globals.css
 
 export const metadata: Metadata = {
   title: 'PermitMap — Construction Intelligence',
