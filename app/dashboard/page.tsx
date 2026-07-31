@@ -985,6 +985,19 @@ export default function Dashboard() {
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&display=swap');
         * { box-sizing: border-box; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        /* Visible keyboard focus (WCAG 2.4.7). :focus-visible = keyboard only, so mouse clicks
+           stay ring-free. !important overrides the inline outline:none on the search / saved-search
+           inputs. Uses the existing blue accent; outline never affects layout. */
+        button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+          outline: 2px solid #93c5fd !important;
+          outline-offset: 2px;
+        }
+        /* Clickable table rows render inside an overflow:hidden container — inset the ring so it
+           isn't clipped. */
+        [role="button"]:focus-visible {
+          outline: 2px solid #93c5fd !important;
+          outline-offset: -2px;
+        }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #0a0f1e; }
         ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
