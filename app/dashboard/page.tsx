@@ -12,6 +12,7 @@ import CallList from './_components/CallList';
 import DigestCard from './_components/DigestCard';
 import UpgradeModal from './_components/UpgradeModal';
 import PermitDrawer from './_components/PermitDrawer';
+import ContractorProfile from './_components/ContractorProfile';
 import SavedSearches from './_components/SavedSearches';
 import { track } from '../../lib/analytics';
 import { startCheckout } from '../../lib/start-checkout';
@@ -126,11 +127,17 @@ export default function Dashboard() {
   const [selectedPermit, setSelectedPermit] = useState<any | null>(null); // read-only detail drawer
   const rowRef = useRef<HTMLTableRowElement | null>(null);               // return focus here on close
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);     // "Load more" — +50 per click
+  const [selectedContractor, setSelectedContractor] = useState<string | null>(null); // Contractor Profile (shown instead of the drawer)
+  const [focusContractorBtn, setFocusContractorBtn] = useState(false);   // return focus to the contractor button when the profile closes
 
   // Reset the visible window whenever the result set meaningfully changes (county / trade / search /
   // sort). Applying a saved search flows through these state setters, so it resets too. Opening or
   // closing the drawer does NOT touch these deps, so it never resets the window.
   useEffect(() => { setVisibleCount(INITIAL_VISIBLE); }, [county, tradeFilter, search, sortOption]);
+
+  // County change → close the drawer and Contractor Profile so no stale (other-county) data can
+  // remain visible. The profile aggregates only the current county's loaded permits.
+  useEffect(() => { setSelectedPermit(null); setSelectedContractor(null); setFocusContractorBtn(false); }, [county]);
 
   // Locked county click → record the lock view and open the upgrade modal
   // (instead of silently doing nothing). The modal fires upgrade_modal_open itself.
@@ -682,10 +689,10 @@ export default function Dashboard() {
                             tabIndex={0}
                             role="button"
                             aria-label="View permit details"
-                            onClick={e => { rowRef.current = e.currentTarget; setSelectedPermit(p); }}
+                            onClick={e => { rowRef.current = e.currentTarget; setFocusContractorBtn(false); setSelectedPermit(p); }}
                             onKeyDown={e => {
                               if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault(); rowRef.current = e.currentTarget; setSelectedPermit(p);
+                                e.preventDefault(); rowRef.current = e.currentTarget; setFocusContractorBtn(false); setSelectedPermit(p);
                               }
                             }}
                             style={{
@@ -913,10 +920,24 @@ export default function Dashboard() {
         />
       )}
 
-      {selectedPermit && (
+      {/* Permit drawer — shown when no Contractor Profile is open (single overlay at a time). */}
+      {selectedPermit && !selectedContractor && (
         <PermitDrawer
           permit={selectedPermit}
-          onClose={() => { setSelectedPermit(null); rowRef.current?.focus(); }}
+          focusContractorOnMount={focusContractorBtn}
+          onOpenContractor={name => setSelectedContractor(name)}
+          onClose={() => { setSelectedPermit(null); setFocusContractorBtn(false); rowRef.current?.focus(); }}
+        />
+      )}
+
+      {/* Contractor Profile — replaces the drawer while open; on close, restore the drawer and
+          return focus to the contractor button. Aggregates only the current county's permits. */}
+      {selectedPermit && selectedContractor && (
+        <ContractorProfile
+          contractor={selectedContractor}
+          county={county}
+          permits={permits}
+          onClose={() => { setSelectedContractor(null); setFocusContractorBtn(true); }}
         />
       )}
 

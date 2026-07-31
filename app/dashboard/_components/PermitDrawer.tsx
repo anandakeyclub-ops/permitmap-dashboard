@@ -3,25 +3,37 @@
 import { Fragment, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { PERMIT_DETAIL_FIELDS, formatPermitField } from '../../../lib/permitDetail';
+import { getContractorName } from '../../../lib/contractorProfile';
 
 // Read-only permit detail drawer. Renders fields already present on the loaded permit object
 // (no fetch, no new data source). Reuses the existing modal overlay behavior (overlay-click +
 // Escape close, X button); adds focus-in on open. Focus RETURN to the triggering row is handled
 // by the parent via onClose. No routing/animation/editing — presentational only.
+//
+// The Contractor value is a button when a contractor name exists (opens the read-only Contractor
+// Profile via onOpenContractor); it stays a plain em dash when absent. When the drawer re-opens
+// after the profile closes, `focusContractorOnMount` returns focus to that button.
 export default function PermitDrawer({
-  permit, onClose,
+  permit, onClose, onOpenContractor, focusContractorOnMount,
 }: {
   permit: Record<string, any>;
   onClose: () => void;
+  onOpenContractor?: (contractorName: string) => void;
+  focusContractorOnMount?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const contractorBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
-    panelRef.current?.focus(); // move focus into the drawer on open
+    // Returning from the Contractor Profile → focus the contractor button; otherwise the panel.
+    if (focusContractorOnMount && contractorBtnRef.current) contractorBtnRef.current.focus();
+    else panelRef.current?.focus();
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, focusContractorOnMount]);
+
+  const contractorName = getContractorName(permit);
 
   return (
     <div onClick={onClose} className="pm-drawer-overlay">
@@ -54,17 +66,36 @@ export default function PermitDrawer({
         </div>
 
         <div className="pm-drawer-grid">
-          {PERMIT_DETAIL_FIELDS.map(f => (
-            <Fragment key={f.label}>
-              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700,
-                textTransform: 'uppercase', letterSpacing: '0.05em', paddingTop: 2 }}>
-                {f.label}
-              </div>
-              <div style={{ fontSize: 13, color: '#e2e8f0', wordBreak: 'break-word', lineHeight: 1.5 }}>
-                {formatPermitField(permit, f)}
-              </div>
-            </Fragment>
-          ))}
+          {PERMIT_DETAIL_FIELDS.map(f => {
+            const isContractor = f.label === 'Contractor';
+            const interactive = isContractor && !!contractorName && !!onOpenContractor;
+            return (
+              <Fragment key={f.label}>
+                <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700,
+                  textTransform: 'uppercase', letterSpacing: '0.05em', paddingTop: 2 }}>
+                  {f.label}
+                </div>
+                <div style={{ fontSize: 13, color: '#e2e8f0', wordBreak: 'break-word', lineHeight: 1.5 }}>
+                  {interactive ? (
+                    <button
+                      ref={contractorBtnRef}
+                      type="button"
+                      onClick={() => onOpenContractor!(formatPermitField(permit, f))}
+                      aria-label={`View contractor profile for ${formatPermitField(permit, f)}`}
+                      style={{
+                        background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+                        font: 'inherit', color: '#93c5fd', textAlign: 'left',
+                        textDecoration: 'underline', textUnderlineOffset: 2, wordBreak: 'break-word',
+                      }}>
+                      {formatPermitField(permit, f)}
+                    </button>
+                  ) : (
+                    formatPermitField(permit, f)
+                  )}
+                </div>
+              </Fragment>
+            );
+          })}
         </div>
       </div>
     </div>
