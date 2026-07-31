@@ -38,6 +38,7 @@ export default function SavedSearches({
   const [name, setName]     = useState('');
   const [error, setError]   = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null); // inline delete confirmation
 
   // Load once on mount (client-only — never during SSR).
   useEffect(() => { setList(loadSavedSearches()); }, []);
@@ -71,7 +72,7 @@ export default function SavedSearches({
       : null);
   };
 
-  const handleDelete = (id: string) => { persist(deleteSavedSearch(list, id)); setNotice(null); };
+  const handleDelete = (id: string) => { persist(deleteSavedSearch(list, id)); setNotice(null); setConfirmingId(null); };
 
   const chip = (label: string) => (
     <span style={{
@@ -142,12 +143,31 @@ export default function SavedSearches({
               </button>
               {chip(s.county.replace(/_/g, ' ') || '—')}
               {chip(s.tradeFilter ? s.tradeFilter.replace(/_/g, ' ') : 'all trades')}
-              <button
-                onClick={() => handleDelete(s.id)}
-                aria-label={`Delete saved search ${s.name}`}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#475569', padding: 2, display: 'inline-flex' }}>
-                <Trash2 size={14} />
-              </button>
+              {confirmingId === s.id ? (
+                <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                  <button
+                    onClick={() => setConfirmingId(null)}
+                    aria-label="Cancel delete"
+                    style={{ background: 'transparent', border: '1px solid #334155', borderRadius: 6,
+                      padding: '3px 9px', fontSize: 11, fontWeight: 600, color: '#94a3b8', cursor: 'pointer' }}>
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleDelete(s.id)}
+                    aria-label={`Confirm delete saved search ${s.name}`}
+                    style={{ background: '#7f1d1d', border: '1px solid #ef4444', borderRadius: 6,
+                      padding: '3px 9px', fontSize: 11, fontWeight: 700, color: '#fecaca', cursor: 'pointer' }}>
+                    Delete
+                  </button>
+                </span>
+              ) : (
+                <button
+                  onClick={() => setConfirmingId(s.id)}
+                  aria-label={`Delete saved search ${s.name}`}
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#475569', padding: 2, display: 'inline-flex' }}>
+                  <Trash2 size={14} />
+                </button>
+              )}
             </div>
           ))}
         </div>

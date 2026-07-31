@@ -48,6 +48,7 @@ export default function SavedLeads({ getToken, onBrowse }:
   const [filter, setFilter]       = useState<SavedLeadStatus | 'all'>('all');
   const [pending, setPending]     = useState<Set<string>>(new Set());
   const [toast, setToast]         = useState<{ id: number; msg: string } | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null); // inline delete confirmation
 
   // One fetch on open — never per-row.
   useEffect(() => {
@@ -109,7 +110,7 @@ export default function SavedLeads({ getToken, onBrowse }:
 
   const remove = async (lead: SavedLead) => {
     if (pending.has(lead.id)) return;
-    if (typeof window !== 'undefined' && !window.confirm('Remove this saved lead?')) return;
+    setConfirmingId(null); // confirmation handled inline by the row (see the delete cell)
     const snapshot = leads;
     setPending(p => new Set(p).add(lead.id));
     setLeads(ls => ls.filter(l => l.id !== lead.id));                              // optimistic
@@ -251,11 +252,29 @@ export default function SavedLeads({ getToken, onBrowse }:
                     </select>
                   </td>
                   <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                    <button onClick={() => remove(l)} disabled={busy} title="Remove" aria-label="Remove saved lead"
-                      style={{ background: 'transparent', border: 'none', cursor: busy ? 'wait' : 'pointer',
-                        color: '#64748b', padding: 4 }}>
-                      <Trash2 size={16} />
-                    </button>
+                    {confirmingId === l.id ? (
+                      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end' }}>
+                        <button onClick={() => setConfirmingId(null)} disabled={busy} aria-label="Cancel remove"
+                          style={{ background: 'transparent', border: '1px solid #334155', borderRadius: 6,
+                            padding: '4px 10px', fontSize: 12, fontWeight: 600, color: '#94a3b8',
+                            cursor: busy ? 'wait' : 'pointer' }}>
+                          Cancel
+                        </button>
+                        <button onClick={() => remove(l)} disabled={busy}
+                          aria-label={`Confirm remove saved lead ${l.address || l.county}`}
+                          style={{ background: '#7f1d1d', border: '1px solid #ef4444', borderRadius: 6,
+                            padding: '4px 10px', fontSize: 12, fontWeight: 700, color: '#fecaca',
+                            cursor: busy ? 'wait' : 'pointer' }}>
+                          Delete
+                        </button>
+                      </span>
+                    ) : (
+                      <button onClick={() => setConfirmingId(l.id)} disabled={busy} title="Remove" aria-label="Remove saved lead"
+                        style={{ background: 'transparent', border: 'none', cursor: busy ? 'wait' : 'pointer',
+                          color: '#64748b', padding: 4 }}>
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </td>
                 </tr>
               );
