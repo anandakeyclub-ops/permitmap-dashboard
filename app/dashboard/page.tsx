@@ -11,6 +11,7 @@ import CallList from './_components/CallList';
 import DigestCard from './_components/DigestCard';
 import UpgradeModal from './_components/UpgradeModal';
 import PermitDrawer from './_components/PermitDrawer';
+import SavedSearches from './_components/SavedSearches';
 import { track } from '../../lib/analytics';
 import { startCheckout } from '../../lib/start-checkout';
 import SavedLeads from './_components/SavedLeads';
@@ -608,6 +609,20 @@ export default function Dashboard() {
                         : `Export CSV (${filteredPermits.length})`}
                     </button>
                   </div>
+
+                  {/* Saved searches (device-local; applies county/trade/keyword/sort) */}
+                  <SavedSearches
+                    current={{ county, tradeFilter, search, sortOption }}
+                    counties={counties}
+                    tier={tier}
+                    allowedCounties={allowedCounties}
+                    onApply={next => {
+                      setCounty(next.county);          // setCounty (not selectCounty): never writes permitmap_county
+                      setTradeFilter(next.tradeFilter);
+                      setSearch(next.search);
+                      setSortOption(next.sortOption);
+                    }}
+                  />
 
                   {/* Permits table */}
                   <div style={{ background: '#111827', border: '1px solid #1e293b',
