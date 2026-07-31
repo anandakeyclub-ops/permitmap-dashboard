@@ -13,6 +13,7 @@ import CallList from './_components/CallList';
 import DigestCard from './_components/DigestCard';
 import UpgradeModal from './_components/UpgradeModal';
 import PermitDrawer from './_components/PermitDrawer';
+import DashboardLoadingSkeleton from './_components/DashboardLoadingSkeleton';
 import ContractorProfile from './_components/ContractorProfile';
 import SavedSearches from './_components/SavedSearches';
 import { track } from '../../lib/analytics';
@@ -456,13 +457,7 @@ export default function Dashboard() {
               </div>
             </div>
           ) : loading ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
-              height: '60vh', flexDirection: 'column', gap: 12 }}>
-              <div style={{ width: 40, height: 40, border: '3px solid #1e293b',
-                borderTop: '3px solid #3b82f6', borderRadius: '50%',
-                animation: 'spin 1s linear infinite' }} />
-              <span style={{ color: '#475569', fontSize: 13 }}>Loading permit data...</span>
-            </div>
+            <DashboardLoadingSkeleton />
           ) : !summary ? (
             <div style={{ color: '#ef4444' }}>Failed to load data.</div>
           ) : (

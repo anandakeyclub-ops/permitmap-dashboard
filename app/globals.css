@@ -6,3 +6,16 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* Loading-skeleton pulse (DashboardLoadingSkeleton). Subtle opacity only — no shimmer, no layout
+   effect. Disabled under prefers-reduced-motion so the blocks render static. */
+@keyframes pm-skel-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 0.9; }
+}
+.pm-skel {
+  animation: pm-skel-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pm-skel { animation: none; }
+}
