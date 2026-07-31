@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sortPermits } from '../lib/sort';
+import { sortPermits, nextSortForColumn, sortIndicatorForColumn } from '../lib/sort';
 
 // Raw permit shape (UPPER_SNAKE), as returned by /permits.
 const rows = () => [
@@ -99,5 +99,58 @@ describe('CSV parity — export uses the same sorted array shown on screen', () 
     const displayedForTable = sortPermits(filtered, 'value_desc');
     const displayedForCsv = sortPermits(filtered, 'value_desc');
     expect(nos(displayedForCsv)).toEqual(nos(displayedForTable));
+  });
+});
+
+describe('nextSortForColumn — click-to-sort headers (shared sortOption)', () => {
+  it('Date: first click from a non-date sort → newest, then toggles newest/oldest', () => {
+    expect(nextSortForColumn('date', '')).toBe('newest');          // from default
+    expect(nextSortForColumn('date', 'value_desc')).toBe('newest'); // from a non-date sort
+    expect(nextSortForColumn('date', 'newest')).toBe('oldest');     // toggle
+    expect(nextSortForColumn('date', 'oldest')).toBe('newest');     // toggle back
+  });
+
+  it('Value: first click from a non-value sort → highest, then toggles highest/lowest', () => {
+    expect(nextSortForColumn('value', '')).toBe('value_desc');        // highest
+    expect(nextSortForColumn('value', 'newest')).toBe('value_desc');  // from a non-value sort
+    expect(nextSortForColumn('value', 'value_desc')).toBe('value_asc'); // toggle → lowest
+    expect(nextSortForColumn('value', 'value_asc')).toBe('value_desc'); // toggle back → highest
+  });
+
+  it('Address: selects ascending and NEVER invents a descending order on repeat clicks', () => {
+    expect(nextSortForColumn('address', '')).toBe('address_asc');
+    expect(nextSortForColumn('address', 'address_asc')).toBe('address_asc'); // repeat stays asc
+    expect(nextSortForColumn('address', 'newest')).toBe('address_asc');
+  });
+
+  it('a header click yields a value the existing Sort dropdown also uses (shared SortOption)', () => {
+    // Every result is a member of the existing SortOption union the dropdown binds to.
+    const dropdownValues = ['', 'newest', 'oldest', 'value_desc', 'value_asc', 'permit_asc', 'address_asc'];
+    for (const col of ['date', 'value', 'address'] as const) {
+      for (const cur of dropdownValues as any[]) {
+        expect(dropdownValues).toContain(nextSortForColumn(col, cur));
+      }
+    }
+  });
+});
+
+describe('sortIndicatorForColumn — aria-sort / arrow state', () => {
+  it('Date: newest → descending, oldest → ascending, otherwise none', () => {
+    expect(sortIndicatorForColumn('date', 'newest')).toBe('descending');
+    expect(sortIndicatorForColumn('date', 'oldest')).toBe('ascending');
+    expect(sortIndicatorForColumn('date', 'value_desc')).toBe('none');
+    expect(sortIndicatorForColumn('date', '')).toBe('none');
+  });
+
+  it('Value: highest → descending, lowest → ascending, otherwise none', () => {
+    expect(sortIndicatorForColumn('value', 'value_desc')).toBe('descending');
+    expect(sortIndicatorForColumn('value', 'value_asc')).toBe('ascending');
+    expect(sortIndicatorForColumn('value', 'newest')).toBe('none');
+  });
+
+  it('Address: address_asc → ascending (only), otherwise none', () => {
+    expect(sortIndicatorForColumn('address', 'address_asc')).toBe('ascending');
+    expect(sortIndicatorForColumn('address', 'newest')).toBe('none');
+    expect(sortIndicatorForColumn('address', '')).toBe('none');
   });
 });
