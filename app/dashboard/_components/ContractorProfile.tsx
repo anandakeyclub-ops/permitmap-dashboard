@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { X } from 'lucide-react';
 import { buildContractorProfile, formatMoney } from '../../../lib/contractorProfile';
+import { handleDialogTab } from '../../../lib/dialogFocus';
 
 export default function ContractorProfile({
   contractor, county, permits, onClose,
@@ -25,7 +26,10 @@ export default function ContractorProfile({
   );
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); return; }
+      handleDialogTab(panelRef.current, e); // trap Tab/Shift+Tab within the profile
+    };
     window.addEventListener('keydown', onKey);
     panelRef.current?.focus(); // move focus into the profile on open
     return () => window.removeEventListener('keydown', onKey);

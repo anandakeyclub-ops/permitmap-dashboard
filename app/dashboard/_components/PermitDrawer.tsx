@@ -4,6 +4,7 @@ import { Fragment, useEffect, useRef } from 'react';
 import { X, Star } from 'lucide-react';
 import { PERMIT_DETAIL_FIELDS, formatPermitField } from '../../../lib/permitDetail';
 import { getContractorName } from '../../../lib/contractorProfile';
+import { handleDialogTab } from '../../../lib/dialogFocus';
 
 // Read-only permit detail drawer. Renders fields already present on the loaded permit object
 // (no fetch, no new data source). Reuses the existing modal overlay behavior (overlay-click +
@@ -35,7 +36,10 @@ export default function PermitDrawer({
   const contractorBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); return; }
+      handleDialogTab(panelRef.current, e); // trap Tab/Shift+Tab within the drawer
+    };
     window.addEventListener('keydown', onKey);
     // Returning from the Contractor Profile → focus the contractor button; otherwise the panel.
     if (focusContractorOnMount && contractorBtnRef.current) contractorBtnRef.current.focus();
