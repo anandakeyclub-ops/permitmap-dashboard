@@ -16,6 +16,7 @@ export const COLORS = {
   'text-primary':      '#e2e8f0', // body high-contrast
   'text-secondary':    '#94a3b8', // sub-labels / secondary metadata
   'text-muted':        '#64748b', // captions / muted
+  'text-faint':        '#475569', // faintest neutral tone — idle icons, inactive, disabled
   'accent-primary':    '#2563eb', // primary accent (borders / CTA)
   'accent-hover':      '#3b82f6', // brighter accent on hover
   'accent-soft':       '#1e3a5f', // soft accent fill (calm primary button)
@@ -54,6 +55,15 @@ export const FONT = {
   weightBold: 700,
 } as const;
 
+// Minimum-viable font-size scale (px) — the three dominant, stable body/label tiers only.
+// Headings and one-off sizes are intentionally left raw pending a future, evidence-backed pass.
+export const FONT_SIZE = {
+  caption: 11, // labels / metadata / captions
+  control: 12, // buttons / controls / secondary table cells
+  body: 13,    // body / primary table text
+} as const;
+
 export type ColorToken = keyof typeof COLORS;
 export type SpacingToken = keyof typeof SPACING;
 export type RadiusToken = keyof typeof RADIUS;
+export type FontSizeToken = keyof typeof FONT_SIZE;
