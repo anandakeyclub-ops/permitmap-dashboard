@@ -78,16 +78,14 @@
   --pm-font-size-body:    13px;
 }
 
-/* ── Canonical secondary button (design adoption PR #2) ─────────────────────
-   First real token consumer. Applied ONLY to Export CSV + Load more. Presentation is token-driven;
-   values without an approved token are preserved verbatim and noted:
-     - padding 8px 14px  (approved spacing scale has no 14px step)
-     - font-size 12px    (no --pm-font-size-* token in the approved set)
-     - disabled #475569  (no --pm-text-disabled token in the approved set)
-   Weight uses --pm-weight-medium (600 = "semibold"). Focus ring is the global :focus-visible rule. */
+/* ── Canonical secondary button ─────────────────────────────────────────────
+   Applied ONLY to Export CSV + Load more. Presentation is token-driven (font-size, text, disabled
+   text, weight, radius, accent, hover all via --pm-* tokens). The one value still preserved raw is
+   padding 8px 14px — the approved spacing scale has no 14px step; see the deferred control-padding
+   audit. Focus ring is the global :focus-visible rule. */
 .pm-btn-secondary {
   padding: 8px 14px;
-  font-size: 12px;
+  font-size: var(--pm-font-size-control);
   font-weight: var(--pm-weight-medium);
   white-space: nowrap;
   border-radius: var(--pm-radius-md);
@@ -107,7 +105,7 @@
 .pm-btn-secondary:disabled {
   background: transparent;
   border-color: var(--pm-border-default);
-  color: #475569; /* preserved: no --pm-text-disabled token yet (gap reported) */
+  color: var(--pm-text-faint);
   cursor: not-allowed;
 }
 @media (prefers-reduced-motion: reduce) {
