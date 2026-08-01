@@ -98,3 +98,25 @@ describe('CSS custom properties mirror designTokens.ts', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 });
+
+describe('token adoption — .pm-btn-secondary (first consumer)', () => {
+  const css = () => readFileSync(resolve(process.cwd(), 'app/globals.css'), 'utf8');
+  const block = () => css().match(/\.pm-btn-secondary\s*\{([\s\S]*?)\}/)![1];
+
+  it('the canonical secondary button consumes the mapped tokens (not hardcoded hex)', () => {
+    const b = block();
+    expect(b).toContain('var(--pm-accent-soft)');    // background
+    expect(b).toContain('var(--pm-border-strong)');  // border
+    expect(b).toContain('var(--pm-focus-ring)');     // text
+    expect(b).toContain('var(--pm-radius-md)');       // radius
+    expect(b).toContain('var(--pm-weight-medium)');   // weight (600)
+  });
+
+  it('hover uses the hover token; only the preserved disabled color is a raw hex', () => {
+    expect(css()).toContain('var(--pm-background-hover)'); // hover bg
+    // The only raw hex allowed in the secondary-button rules is the documented disabled gap (#475569).
+    const rules = css().slice(css().indexOf('.pm-btn-secondary {'));
+    const hexes = [...rules.matchAll(/#[0-9a-fA-F]{6}/g)].map(m => m[0].toLowerCase());
+    expect(hexes).toEqual(['#475569']); // only the documented disabled-color gap
+  });
+});

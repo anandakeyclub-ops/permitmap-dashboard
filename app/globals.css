@@ -72,3 +72,37 @@
   --pm-weight-medium: 600;
   --pm-weight-bold:   700;
 }
+
+/* ── Canonical secondary button (design adoption PR #2) ─────────────────────
+   First real token consumer. Applied ONLY to Export CSV + Load more. Presentation is token-driven;
+   values without an approved token are preserved verbatim and noted:
+     - padding 8px 14px  (approved spacing scale has no 14px step)
+     - font-size 12px    (no --pm-font-size-* token in the approved set)
+     - disabled #475569  (no --pm-text-disabled token in the approved set)
+   Weight uses --pm-weight-medium (600 = "semibold"). Focus ring is the global :focus-visible rule. */
+.pm-btn-secondary {
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: var(--pm-weight-medium);
+  white-space: nowrap;
+  border-radius: var(--pm-radius-md);
+  background: var(--pm-accent-soft);
+  border: 1px solid var(--pm-border-strong);
+  color: var(--pm-focus-ring);
+  cursor: pointer;
+  transition: background-color 140ms ease-out, border-color 140ms ease-out, transform 120ms ease-out;
+}
+@media (hover: hover) {
+  .pm-btn-secondary:not(:disabled):hover { background: var(--pm-background-hover); }
+}
+.pm-btn-secondary:not(:disabled):active { transform: translateY(1px); }
+.pm-btn-secondary:disabled {
+  background: transparent;
+  border-color: var(--pm-border-default);
+  color: #475569; /* preserved: no --pm-text-disabled token yet (gap reported) */
+  cursor: not-allowed;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pm-btn-secondary { transition: background-color 140ms ease-out, border-color 140ms ease-out; }
+  .pm-btn-secondary:not(:disabled):active { transform: none; }
+}

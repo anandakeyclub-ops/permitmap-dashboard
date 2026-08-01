@@ -645,14 +645,7 @@ export default function Dashboard() {
                       onClick={exportCsv}
                       disabled={filteredPermits.length === 0}
                       aria-label="Export CSV"
-                      style={{
-                        padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                        whiteSpace: 'nowrap',
-                        cursor: filteredPermits.length === 0 ? 'not-allowed' : 'pointer',
-                        background: filteredPermits.length === 0 ? 'transparent' : '#1e3a5f',
-                        border: `1px solid ${filteredPermits.length === 0 ? '#1e293b' : '#2563eb'}`,
-                        color: filteredPermits.length === 0 ? '#475569' : '#93c5fd',
-                      }}>
+                      className="pm-btn-secondary">
                       {filteredPermits.length === 0
                         ? 'No results to export'
                         : `Export CSV (${filteredPermits.length})`}
@@ -790,11 +783,7 @@ export default function Dashboard() {
                           <button
                             type="button"
                             onClick={() => setVisibleCount(c => nextVisibleCount(c, displayedPermits.length))}
-                            style={{
-                              padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                              whiteSpace: 'nowrap', cursor: 'pointer',
-                              background: '#1e3a5f', border: '1px solid #2563eb', color: '#93c5fd',
-                            }}>
+                            className="pm-btn-secondary">
                             Load more
                           </button>
                         )}
