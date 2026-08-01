@@ -16,7 +16,12 @@ import PermitDrawer from './_components/PermitDrawer';
 import DashboardLoadingSkeleton from './_components/DashboardLoadingSkeleton';
 import ContractorProfile from './_components/ContractorProfile';
 import SavedSearches from './_components/SavedSearches';
+import { buildContractorProfile } from '../../lib/contractorProfile';
 import { track } from '../../lib/analytics';
+import {
+  shouldEmitDashboardView, dashboardViewedEvent, permitDrawerOpenEvent,
+  contractorProfileViewEvent, csvExportEvent, savedLeadEvent,
+} from '../../lib/activationEvents';
 import { startCheckout } from '../../lib/start-checkout';
 import SavedLeads from './_components/SavedLeads';
 import { promoteSignupCounty, dismissFirstLogin } from '../actions';
@@ -129,6 +134,7 @@ export default function Dashboard() {
   const [selectedPermit, setSelectedPermit] = useState<any | null>(null); // read-only detail drawer
   const rowRef = useRef<HTMLTableRowElement | null>(null);               // return focus here on close
   const upgradeTriggerRef = useRef<HTMLElement | null>(null);            // return focus to the UpgradeModal opener on close
+  const dashboardViewedRef = useRef(false);                              // dashboard_viewed: emit once per mount (after county resolves)
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);     // "Load more" — +50 per click
   const [selectedContractor, setSelectedContractor] = useState<string | null>(null); // Contractor Profile (shown instead of the drawer)
   const [focusContractorBtn, setFocusContractorBtn] = useState(false);   // return focus to the contractor button when the profile closes
@@ -204,6 +210,16 @@ export default function Dashboard() {
     return () => { cancelled = true; };
   }, [user, county, counties, tier]);
 
+  // dashboard_viewed — fire once per mount, only after the county resolves so the payload carries
+  // it. Ref-guarded, so it never re-emits on tab change or rerender. Fire-and-forget analytics only.
+  useEffect(() => {
+    if (shouldEmitDashboardView(dashboardViewedRef.current, county)) {
+      dashboardViewedRef.current = true;
+      const e = dashboardViewedEvent(county, activeTab, tier);
+      track(getToken, e.event, e.props);
+    }
+  }, [county, activeTab, tier, getToken]);
+
   // First-login onboarding (PART C): shown until dismissed (publicMetadata.firstLogin === false).
   useEffect(() => {
     if (user) setShowWelcome(user.publicMetadata?.firstLogin !== false);
@@ -266,11 +282,35 @@ export default function Dashboard() {
     try {
       const res = await saveLead(getToken, permit);
       setSavedLeadIds(prev => savedIdsAfter(prev, pid, res.already_saved ? 'already_saved' : 'success'));
+      // saved_lead — only after the save resolves (success or already_saved). Not in catch, not on
+      // click. Fire-and-forget; can never affect save state or the drawer.
+      const ev = savedLeadEvent(res, permit);
+      track(getToken, ev.event, ev.props);
     } catch {
       setSaveLeadError(true); // leave unsaved → retry allowed
     } finally {
       setSavingLeadId(null);
     }
+  };
+
+  // Single permit-open handler for BOTH the row click and keyboard (Enter/Space) paths, so
+  // permit_drawer_open tracking can never drift between them. Emits once per actual open.
+  const openPermitDrawer = (p: any, rowEl: HTMLTableRowElement | null) => {
+    if (rowEl) rowRef.current = rowEl;
+    setFocusContractorBtn(false);
+    setSelectedPermit(p);
+    const ev = permitDrawerOpenEvent(p);
+    track(getToken, ev.event, ev.props);
+  };
+
+  // Contractor Profile open — shared handler so tracking sits with the state change. permit_count is
+  // derived by REUSING buildContractorProfile (the same aggregation the profile renders); null when
+  // it can't be computed, in which case the field is omitted from the payload.
+  const openContractor = (name: string) => {
+    setSelectedContractor(name);
+    const permitCount = buildContractorProfile(permits, name, county)?.permitCount ?? null;
+    const ev = contractorProfileViewEvent(name, county, permitCount);
+    track(getToken, ev.event, ev.props);
   };
 
   // Keyword search runs over the already-authorized, trade-filtered permit list (client-side;
@@ -301,6 +341,10 @@ export default function Dashboard() {
     a.href = url; a.download = filename;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    // csv_export — after a real export (past the zero-row early return, download already triggered).
+    // csvExportEvent returns null for an empty set; fire-and-forget so it never delays the download.
+    const ev = csvExportEvent(displayedPermits.length, county, tradeFilter, search, sortOption);
+    if (ev) track(getToken, ev.event, ev.props);
   };
 
   const tradeChartData = summary?.trade_breakdown
@@ -718,10 +762,10 @@ export default function Dashboard() {
                             tabIndex={0}
                             role="button"
                             aria-label="View permit details"
-                            onClick={e => { rowRef.current = e.currentTarget; setFocusContractorBtn(false); setSelectedPermit(p); }}
+                            onClick={e => openPermitDrawer(p, e.currentTarget)}
                             onKeyDown={e => {
                               if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault(); rowRef.current = e.currentTarget; setFocusContractorBtn(false); setSelectedPermit(p);
+                                e.preventDefault(); openPermitDrawer(p, e.currentTarget);
                               }
                             }}
                             style={{
@@ -951,7 +995,7 @@ export default function Dashboard() {
         <PermitDrawer
           permit={selectedPermit}
           focusContractorOnMount={focusContractorBtn}
-          onOpenContractor={name => setSelectedContractor(name)}
+          onOpenContractor={openContractor}
           canSave={!isPreview}
           saved={savedLeadIds.has(saveLeadPermitId(selectedPermit))}
           saving={savingLeadId === saveLeadPermitId(selectedPermit)}

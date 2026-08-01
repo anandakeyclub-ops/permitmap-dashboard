@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { Target, MapPin, Clock, DollarSign, Flame, TrendingUp, ChevronRight, Star } from 'lucide-react';
 import { getSavedLeads, saveLead, type GetToken } from '../../../lib/api';
+import { track } from '../../../lib/analytics';
+import { savedLeadEvent } from '../../../lib/activationEvents';
 
 // ── Phase A: "Best Opportunities This Week" — ranked pursuit queue + explainability.
 // Data source: /permits/scored (already sorted by score desc, score>=50, tier-capped).
@@ -154,6 +156,10 @@ export default function CallList({ scored, topZips, getToken }:
       const res = await saveLead(getToken, p);
       setSavedIds(prev => new Set(prev).add(pno));                 // fill on success
       notify(res.already_saved ? 'Already in your saved leads' : 'Lead saved');
+      // saved_lead — only after the save resolves (success or already_saved). Not in catch, not on
+      // click. Fire-and-forget; never affects star state or the toast.
+      const ev = savedLeadEvent(res, p);
+      track(getToken, ev.event, ev.props);
     } catch {
       setSavedIds(prev => { const n = new Set(prev); n.delete(pno); return n; });  // revert
       notify('Failed to save — try again');

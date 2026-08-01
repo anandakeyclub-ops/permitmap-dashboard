@@ -2,6 +2,8 @@
 // Fire-and-forget and NEVER throws — analytics must never affect the UI or checkout.
 // The API derives user_id/email/tier from the Clerk JWT; we only pass funnel context.
 
+import type { ActivationEvent } from './activationEvents';
+
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || 'https://permitmap-api.onrender.com';
 
@@ -17,6 +19,10 @@ export type FunnelEvent =
   | 'stripe_checkout_started'
   | 'checkout_resume_failed';
 
+// Lifecycle activation events (defined + built in lib/activationEvents; server allowlist mirrors
+// these). Kept as a separate union so the funnel taxonomy above is untouched.
+export type AnalyticsEvent = FunnelEvent | ActivationEvent;
+
 export interface TrackProps {
   county?: string;
   plan?: string;
@@ -25,7 +31,7 @@ export interface TrackProps {
   properties?: Record<string, unknown>;
 }
 
-export function track(getToken: GetToken | undefined, event: FunnelEvent, props: TrackProps = {}): void {
+export function track(getToken: GetToken | undefined, event: AnalyticsEvent, props: TrackProps = {}): void {
   // Detached async; nothing awaits it, and every failure path is swallowed.
   void (async () => {
     try {
