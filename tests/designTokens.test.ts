@@ -116,6 +116,8 @@ describe('token adoption — .pm-btn-secondary (first consumer)', () => {
     expect(b).toContain('var(--pm-focus-ring)');     // text
     expect(b).toContain('var(--pm-radius-md)');       // radius
     expect(b).toContain('var(--pm-weight-medium)');   // weight (600)
+    expect(b).toContain('var(--pm-font-size-control)'); // font size (12px)
+    expect(b).not.toContain('12px');                  // no raw font-size remains in the base block
   });
 
   it('hover brightens via accent tokens (bg accent-primary, border accent-hover)', () => {
@@ -124,9 +126,15 @@ describe('token adoption — .pm-btn-secondary (first consumer)', () => {
     expect(hover).toContain('var(--pm-accent-hover)');   // strengthened hover border
   });
 
-  it('only the preserved disabled color is a raw hex in the secondary-button rules', () => {
+  it('disabled state consumes --pm-text-faint (no raw #475569)', () => {
+    const disabled = css().match(/\.pm-btn-secondary:disabled\s*\{([\s\S]*?)\}/)![1];
+    expect(disabled).toContain('var(--pm-text-faint)');
+    expect(disabled).not.toContain('#475569');
+  });
+
+  it('no raw hex remains in any secondary-button rule (fully tokenized)', () => {
     const rules = css().slice(css().indexOf('.pm-btn-secondary {'));
     const hexes = [...rules.matchAll(/#[0-9a-fA-F]{6}/g)].map(m => m[0].toLowerCase());
-    expect(hexes).toEqual(['#475569']); // only the documented disabled-color gap
+    expect(hexes).toEqual([]);
   });
 });
