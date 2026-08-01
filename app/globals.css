@@ -93,7 +93,10 @@
   transition: background-color 140ms ease-out, border-color 140ms ease-out, transform 120ms ease-out;
 }
 @media (hover: hover) {
-  .pm-btn-secondary:not(:disabled):hover { background: var(--pm-background-hover); }
+  .pm-btn-secondary:not(:disabled):hover {
+    background: var(--pm-accent-primary);
+    border-color: var(--pm-accent-hover);
+  }
 }
 .pm-btn-secondary:not(:disabled):active { transform: translateY(1px); }
 .pm-btn-secondary:disabled {
