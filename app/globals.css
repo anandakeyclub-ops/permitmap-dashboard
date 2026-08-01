@@ -45,6 +45,7 @@
   --pm-text-primary:      #e2e8f0;
   --pm-text-secondary:    #94a3b8;
   --pm-text-muted:        #64748b;
+  --pm-text-faint:        #475569;
   --pm-accent-primary:    #2563eb;
   --pm-accent-hover:      #3b82f6;
   --pm-accent-soft:       #1e3a5f;
@@ -71,6 +72,10 @@
   --pm-font-family:   'DM Sans', system-ui, sans-serif;
   --pm-weight-medium: 600;
   --pm-weight-bold:   700;
+
+  --pm-font-size-caption: 11px;
+  --pm-font-size-control: 12px;
+  --pm-font-size-body:    13px;
 }
 
 /* ── Canonical secondary button (design adoption PR #2) ─────────────────────

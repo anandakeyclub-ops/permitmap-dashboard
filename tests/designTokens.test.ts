@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { COLORS, SPACING, RADIUS, FONT } from '../lib/designTokens';
+import { COLORS, SPACING, RADIUS, FONT, FONT_SIZE } from '../lib/designTokens';
 
 // ── Exact approved values (the authoritative spec) ──────────────────────────
 const APPROVED_COLORS = {
@@ -14,6 +14,7 @@ const APPROVED_COLORS = {
   'text-primary':      '#e2e8f0',
   'text-secondary':    '#94a3b8',
   'text-muted':        '#64748b',
+  'text-faint':        '#475569',
   'accent-primary':    '#2563eb',
   'accent-hover':      '#3b82f6',
   'accent-soft':       '#1e3a5f',
@@ -46,6 +47,10 @@ describe('designTokens.ts — approved names & values', () => {
     expect(FONT).toEqual({ family: "'DM Sans', system-ui, sans-serif", weightMedium: 600, weightBold: 700 });
   });
 
+  it('FONT_SIZE is exactly the three approved tiers (caption 11 / control 12 / body 13)', () => {
+    expect(FONT_SIZE).toEqual({ caption: 11, control: 12, body: 13 });
+  });
+
   it('TypeScript object shape: plain string-keyed maps, hex values are lowercase #rrggbb', () => {
     for (const [k, v] of Object.entries(COLORS)) {
       expect(typeof k).toBe('string');
@@ -63,6 +68,7 @@ function expectedCssVars(): Record<string, string> {
   m['--pm-font-family'] = FONT.family;
   m['--pm-weight-medium'] = String(FONT.weightMedium);
   m['--pm-weight-bold'] = String(FONT.weightBold);
+  for (const [k, v] of Object.entries(FONT_SIZE)) m[`--pm-font-size-${k}`] = `${v}px`;
   return m;
 }
 
