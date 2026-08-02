@@ -20,8 +20,9 @@ const API_BASE =
 export type GetToken = (options?: { template?: string }) => Promise<string | null>;
 
 // Optional method/body for write requests. Omitted entirely by existing GET callers,
-// so their behavior is unchanged. A JSON body sets Content-Type automatically.
-type ApiInit = { method?: string; body?: unknown; headers?: Record<string, string> };
+// so their behavior is unchanged. A JSON body sets Content-Type automatically. An optional
+// AbortSignal lets callers cancel in-flight requests (used by live search's newest-wins).
+type ApiInit = { method?: string; body?: unknown; headers?: Record<string, string>; signal?: AbortSignal };
 
 export async function apiFetch(
   path: string,
@@ -38,6 +39,7 @@ export async function apiFetch(
     }
   }
   const opts: RequestInit = { method: init?.method, headers };
+  if (init?.signal) opts.signal = init.signal;
   if (init?.body !== undefined) {
     headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(init.body);

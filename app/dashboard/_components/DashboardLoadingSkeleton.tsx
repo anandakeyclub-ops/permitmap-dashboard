@@ -4,26 +4,10 @@
 // (replaces the old centered 60vh spinner). Takes NO props and reads no live state, so it can
 // never render stale permit or KPI data. Purely decorative skeleton blocks are aria-hidden; a
 // single role="status" element announces "Loading permit data" once. Nothing here is focusable.
-// No live controls, no load-more, no empty state, no data. Reuses the existing dark surfaces.
+// The table surface is the shared PermitTableSkeleton (also used by live search) — single source
+// of that markup, no duplication.
 
-// The six visible permits-table columns (kept in sync with the live table headers).
-const TABLE_HEADERS = ['Score', 'Address', 'Type', 'Trade', 'Value', 'Date'];
-const SKELETON_ROWS = 7;
-
-// A neutral skeleton block; `pm-skel` provides the subtle opacity pulse (disabled under
-// prefers-reduced-motion — see app/globals.css). Decorative only.
-function Block({ width, height = 12 }: { width: number | string; height?: number }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="pm-skel"
-      style={{
-        display: 'inline-block', width, height, borderRadius: 4,
-        background: '#1e293b', verticalAlign: 'middle',
-      }}
-    />
-  );
-}
+import PermitTableSkeleton, { SkelBlock as Block, SKELETON_ROWS, TABLE_HEADERS } from './PermitTableSkeleton';
 
 export default function DashboardLoadingSkeleton() {
   return (
@@ -62,35 +46,8 @@ export default function DashboardLoadingSkeleton() {
         ))}
       </div>
 
-      {/* Permits-style table surface: real header labels + 7 skeleton rows */}
-      <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, overflow: 'hidden' }}>
-        <div className="pm-table-scroll">
-        <table aria-hidden="true" className="pm-permits-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid #1e293b' }}>
-              {TABLE_HEADERS.map(h => (
-                <th key={h} style={{
-                  padding: '12px 16px', textAlign: 'left', fontSize: 11, color: '#475569',
-                  fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
-                }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {Array.from({ length: SKELETON_ROWS }).map((_, i) => (
-              <tr key={i} style={{ borderBottom: '1px solid #0f172a', background: i % 2 === 0 ? '#111827' : '#0d1529' }}>
-                <td style={{ padding: '12px 16px' }}><Block width={36} height={36} /></td>
-                <td style={{ padding: '12px 16px' }}><Block width={'80%'} /></td>
-                <td style={{ padding: '12px 16px' }}><Block width={90} /></td>
-                <td style={{ padding: '12px 16px' }}><Block width={64} height={18} /></td>
-                <td style={{ padding: '12px 16px' }}><Block width={70} /></td>
-                <td style={{ padding: '12px 16px' }}><Block width={80} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        </div>
-      </div>
+      {/* Permits-style table surface: shared with the live-search loading state. */}
+      <PermitTableSkeleton />
     </div>
   );
 }

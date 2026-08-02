@@ -4,7 +4,10 @@ import { useEffect, useState, useRef } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { apiFetch, getSavedLeads, saveLead } from '../../lib/api';
 import { saveLeadPermitId, canSaveLead, savedIdsAfter } from '../../lib/saveLeadState';
-import { filterByKeywords } from '../../lib/search';
+import {
+  buildPermitsPath, commitDelayMs, createLatest,
+  showPermitEmptyState, showPermitFooter, csvDisabled,
+} from '../../lib/liveSearch';
 import { buildPermitCsv, createExportFilename } from '../../lib/csv';
 import { sortPermits, SORT_OPTIONS, nextSortForColumn, sortIndicatorForColumn, type SortOption, type SortColumn } from '../../lib/sort';
 import { INITIAL_VISIBLE, shownCount, shouldShowLoadMore, nextVisibleCount } from '../../lib/tableView';
@@ -14,6 +17,7 @@ import DigestCard from './_components/DigestCard';
 import UpgradeModal from './_components/UpgradeModal';
 import PermitDrawer from './_components/PermitDrawer';
 import DashboardLoadingSkeleton from './_components/DashboardLoadingSkeleton';
+import PermitTableSkeleton from './_components/PermitTableSkeleton';
 import ContractorProfile from './_components/ContractorProfile';
 import SavedSearches from './_components/SavedSearches';
 import { buildContractorProfile } from '../../lib/contractorProfile';
@@ -125,7 +129,10 @@ export default function Dashboard() {
   const [loading, setLoading]       = useState(true);
   const [activeTab, setActiveTab]   = useState<'opportunities' | 'permits' | 'trends' | 'insights' | 'saved'>('opportunities');
   const [tradeFilter, setTradeFilter] = useState('');
-  const [search, setSearch]         = useState('');
+  const [search, setSearch]         = useState('');       // raw search-box value (drives the debounce)
+  const [committedQuery, setCommittedQuery] = useState(''); // debounced/committed query sent to /permits
+  const [permitsLoading, setPermitsLoading] = useState(true); // permits-list-only loading (search + county)
+  const latestPermits = useRef(createLatest());           // newest-wins guard for the permits fetch
   const [upgrade, setUpgrade] = useState<
     { trigger: 'locked_county' | 'get_full_access_button'; county: any | null } | null
   >(null);
@@ -145,10 +152,21 @@ export default function Dashboard() {
   const [savingLeadId, setSavingLeadId] = useState<string | null>(null);
   const [saveLeadError, setSaveLeadError] = useState(false);
 
-  // Reset the visible window whenever the result set meaningfully changes (county / trade / search /
-  // sort). Applying a saved search flows through these state setters, so it resets too. Opening or
-  // closing the drawer does NOT touch these deps, so it never resets the window.
-  useEffect(() => { setVisibleCount(INITIAL_VISIBLE); }, [county, tradeFilter, search, sortOption]);
+  // Reset the visible window whenever the result set meaningfully changes (county / trade /
+  // committed query / sort). Keyed on committedQuery (not the raw keystroke `search`), so the window
+  // resets once per committed search, not on every character. Applying a saved search flows through
+  // these setters, so it resets too. Opening/closing the drawer never touches these deps.
+  useEffect(() => { setVisibleCount(INITIAL_VISIBLE); }, [county, tradeFilter, committedQuery, sortOption]);
+
+  // Live search: commit the trimmed query ~275 ms after typing stops. Blank/cleared commits
+  // immediately (commitDelayMs → 0), so clearing the box instantly reloads the unfiltered list.
+  // Pressing Enter commits immediately via the input's onKeyDown (below), bypassing this timer.
+  useEffect(() => {
+    const delay = commitDelayMs(search);
+    if (delay === 0) { setCommittedQuery(search.trim()); return; }
+    const t = setTimeout(() => setCommittedQuery(search.trim()), delay);
+    return () => clearTimeout(t);
+  }, [search]);
 
   // County change → close the drawer and Contractor Profile so no stale (other-county) data can
   // remain visible. The profile aggregates only the current county's loaded permits.
@@ -225,13 +243,13 @@ export default function Dashboard() {
     if (user) setShowWelcome(user.publicMetadata?.firstLogin !== false);
   }, [user]);
 
-  // Load summary + permits when county changes
+  // Load summary + scored + digest when county changes. Permits are fetched SEPARATELY (below) so a
+  // keyword search re-fetches only the permits list — not the Opportunity queue, summary, or digest.
   useEffect(() => {
     if (!county) { setLoading(false); return; }  // nothing selected yet -> show the county picker
     setLoading(true);
     Promise.all([
       apiFetch(`/summary?county=${county}`, getToken).then(r => r.json()),
-      apiFetch(`/permits?county=${county}&limit=${limits.permits}`, getToken).then(r => r.json()),
       // Phase A: ranked opportunities. 403 for preview/no-tier -> empty (the tab shows PreviewLock).
       apiFetch(`/permits/scored?county=${county}&top_n=50`, getToken)
         .then(r => (r.ok ? r.json() : { permits: [] }))
@@ -240,14 +258,37 @@ export default function Dashboard() {
       apiFetch(`/digest?county=${county}`, getToken)
         .then(r => (r.ok ? r.json() : null))
         .catch(() => null),
-    ]).then(([s, p, sc, dg]) => {
+    ]).then(([s, sc, dg]) => {
       setSummary(s);
-      setPermits(p.permits || []);
       setScored(sc.permits || []);
       setDigest(dg);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [county, limits.permits, getToken]);
+
+  // Permits list — its own fetch, keyed on the committed query (server-side keyword search runs over
+  // the full authorized dataset BEFORE the tier cap). AbortController cancels the in-flight request
+  // on any change (query/county/limit/unmount); the newest-wins guard ignores a stale response that
+  // resolves late. Blank query omits the param → identical to the pre-search request.
+  useEffect(() => {
+    if (!county) { setPermits([]); setPermitsLoading(false); return; }
+    const requestId = latestPermits.current.begin();
+    const controller = new AbortController();
+    setPermitsLoading(true);
+    apiFetch(buildPermitsPath(county, limits.permits, committedQuery), getToken, { signal: controller.signal })
+      .then(r => r.json())
+      .then(p => {
+        if (!latestPermits.current.isCurrent(requestId)) return; // a newer search superseded this one
+        setPermits(p.permits || []);
+        setPermitsLoading(false);
+      })
+      .catch(err => {
+        if (err?.name === 'AbortError' || !latestPermits.current.isCurrent(requestId)) return; // ignore aborts/stale
+        setPermits([]);          // non-abort failure: fall back to empty (existing permits error behavior)
+        setPermitsLoading(false);
+      });
+    return () => controller.abort();
+  }, [county, limits.permits, getToken, committedQuery]);
 
   // Phase B: digest CTA -> switch to the Opportunity Queue and scroll it into view.
   const goToQueue = () => {
@@ -313,17 +354,15 @@ export default function Dashboard() {
     track(getToken, ev.event, ev.props);
   };
 
-  // Keyword search runs over the already-authorized, trade-filtered permit list (client-side;
-  // preserves county/trade/entitlement filters). Blank query → all currently filtered results.
-  const filteredPermits = filterByKeywords(
-    tradeFilter ? permits.filter(p => p.trade === tradeFilter) : permits,
-    search,
-  );
+  // Keyword search is now SERVER-side (permits already match `committedQuery`). The client pipeline
+  // only applies the trade filter, then sorts — over the server-returned, authorized set. Trade
+  // filtering stays client-side, exactly as before. Blank query → server returned the full list.
+  const tradeFilteredPermits = tradeFilter ? permits.filter(p => p.trade === tradeFilter) : permits;
 
   // Sorting runs LAST in the pipeline, over the already-filtered/authorized set. The same
   // array feeds the visible rows AND the CSV export so on-screen order matches the file.
   // Default ('') preserves the current server-returned order. Pure; never mutates/​fetches.
-  const displayedPermits = sortPermits(filteredPermits, sortOption);
+  const displayedPermits = sortPermits(tradeFilteredPermits, sortOption);
 
   // Export exactly the currently-visible (filtered + sorted + entitlement-authorized) rows. CSV
   // serialization is pure (lib/csv); only the browser download trigger lives here. Never
@@ -646,12 +685,14 @@ export default function Dashboard() {
                     ))}
                   </div>
 
-                  {/* Keyword search — client-side over the already-authorized permit list */}
+                  {/* Keyword search — server-side (GET /permits?query=…). Live: commits ~275 ms after
+                      typing stops; Enter commits immediately; clearing reloads the full list. */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
                     <div className="pm-permits-search" style={{ position: 'relative' }}>
                       <input
                         value={search}
                         onChange={e => setSearch(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') setCommittedQuery(search.trim()); }}
                         placeholder="Search permits, descriptions, contractors, addresses…"
                         aria-label="Search permits"
                         style={{
@@ -683,16 +724,18 @@ export default function Dashboard() {
                       ))}
                     </select>
                     <span style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>
-                      {filteredPermits.length} {filteredPermits.length === 1 ? 'match' : 'matches'}
+                      {permitsLoading
+                        ? 'Searching…'
+                        : `${displayedPermits.length} ${displayedPermits.length === 1 ? 'match' : 'matches'}`}
                     </span>
                     <button
                       onClick={exportCsv}
-                      disabled={filteredPermits.length === 0}
+                      disabled={csvDisabled(permitsLoading, displayedPermits.length)}
                       aria-label="Export CSV"
                       className="pm-btn-secondary">
-                      {filteredPermits.length === 0
+                      {displayedPermits.length === 0
                         ? 'No results to export'
-                        : `Export CSV (${filteredPermits.length})`}
+                        : `Export CSV (${displayedPermits.length})`}
                     </button>
                   </div>
 
@@ -710,7 +753,12 @@ export default function Dashboard() {
                     }}
                   />
 
-                  {/* Permits table */}
+                  {/* Permits table — while a search/county fetch is in flight, show the shared
+                      table-shaped skeleton (search controls above stay visible/typable). Never shows
+                      stale rows, the empty state, the footer, or a count from the prior result set. */}
+                  {permitsLoading ? (
+                    <PermitTableSkeleton announce />
+                  ) : (
                   <div style={{ background: '#111827', border: '1px solid #1e293b',
                     borderRadius: 12, overflow: 'hidden' }}>
                     <div className="pm-table-scroll">
@@ -817,7 +865,7 @@ export default function Dashboard() {
                       </tbody>
                     </table>
                     </div>
-                    {displayedPermits.length > 0 && (
+                    {showPermitFooter(permitsLoading, displayedPermits.length) && (
                       <div style={{ padding: '12px 20px', borderTop: '1px solid #1e293b',
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                         <span style={{ fontSize: 12, color: '#64748b' }}>
@@ -833,7 +881,7 @@ export default function Dashboard() {
                         )}
                       </div>
                     )}
-                    {filteredPermits.length === 0 && (
+                    {showPermitEmptyState(permitsLoading, displayedPermits.length) && (
                       <div style={{ padding: 40, textAlign: 'center', color: '#475569' }}>
                         {search
                           ? 'No permits match your search and current filters.'
@@ -856,6 +904,7 @@ export default function Dashboard() {
                       </div>
                     )}
                   </div>
+                  )}
                 </>
               )}
 
