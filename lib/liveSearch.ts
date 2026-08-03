@@ -13,10 +13,20 @@ export const SEARCH_DEBOUNCE_MS = 275;
  * (identical to the pre-search request, so no-query behavior is unchanged); otherwise the query is
  * trimmed and URL-encoded. County is always encoded.
  */
-export function buildPermitsPath(county: string, limit: number, query?: string | null): string {
+export function buildPermitsPath(
+  county: string,
+  limit: number,
+  query?: string | null,
+  dateFrom?: string | null,
+  dateTo?: string | null,
+): string {
   let path = `/permits?county=${encodeURIComponent(county)}&limit=${limit}`;
   const q = (query || '').trim();
   if (q) path += `&query=${encodeURIComponent(q)}`;
+  // Optional historical date range. Omitted params → identical to the pre-date request (backward
+  // compatible). Server-side date filtering (permitmap-api) runs before the tier cap.
+  if (dateFrom) path += `&date_from=${encodeURIComponent(dateFrom)}`;
+  if (dateTo) path += `&date_to=${encodeURIComponent(dateTo)}`;
   return path;
 }
 

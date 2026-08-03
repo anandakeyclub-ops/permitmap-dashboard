@@ -47,6 +47,33 @@ export async function apiFetch(
   return fetch(`${API_BASE}${path}`, opts);
 }
 
+// ── County history coverage (PR2) ─────────────────────────────────────────────
+// GET /coverage?county=<county> — aggregate, non-customer metadata. Read-only; a failure
+// (404 not-covered / 503 unavailable / network) must be handled non-fatally by the caller so
+// permit search stays usable. Supports an AbortSignal for county-switch newest-wins.
+export interface CountyCoverage {
+  county: string;
+  history_start: string | null;   // available_date_from (ISO)
+  history_end: string | null;     // available_date_to (ISO)
+  permit_count: number | null;
+}
+
+export async function getCoverage(
+  county: string,
+  getToken?: GetToken,
+  signal?: AbortSignal,
+): Promise<CountyCoverage> {
+  const r = await apiFetch(`/coverage?county=${encodeURIComponent(county)}`, getToken, { signal });
+  if (!r.ok) throw new Error(`coverage_${r.status}`);
+  const j = await r.json();
+  return {
+    county: j.county ?? county,
+    history_start: j.history_start ?? null,
+    history_end: j.history_end ?? null,
+    permit_count: typeof j.permit_count === 'number' ? j.permit_count : null,
+  };
+}
+
 // ── Saved Leads (Phase C) ─────────────────────────────────────────────────────
 // These hit the auth-gated /saved-leads endpoints, so getToken is required (a CRM
 // row has no owner without it). It's threaded explicitly to match the existing
