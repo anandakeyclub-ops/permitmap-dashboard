@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef } from 'react';
 import { X, Star } from 'lucide-react';
-import { PERMIT_DETAIL_FIELDS, formatPermitField } from '../../../lib/permitDetail';
+import { PERMIT_DETAIL_FIELDS, formatPermitField, isNotProvided, NOT_PROVIDED } from '../../../lib/permitDetail';
 import { getContractorName } from '../../../lib/contractorProfile';
 import { handleDialogTab } from '../../../lib/dialogFocus';
 
@@ -116,6 +116,8 @@ export default function PermitDrawer({
 
         <div className="pm-drawer-grid">
           {PERMIT_DETAIL_FIELDS.map(f => {
+            const value = formatPermitField(permit, f, NOT_PROVIDED);
+            const notProvided = isNotProvided(value);
             const isContractor = f.label === 'Contractor';
             const interactive = isContractor && !!contractorName && !!onOpenContractor;
             return (
@@ -124,22 +126,24 @@ export default function PermitDrawer({
                   textTransform: 'uppercase', letterSpacing: '0.05em', paddingTop: 2 }}>
                   {f.label}
                 </div>
-                <div style={{ fontSize: 13, color: '#e2e8f0', wordBreak: 'break-word', lineHeight: 1.5 }}>
+                <div style={{ fontSize: 13, wordBreak: 'break-word', lineHeight: 1.5,
+                  color: notProvided ? '#64748b' : '#e2e8f0',
+                  fontStyle: notProvided ? 'italic' : 'normal' }}>
                   {interactive ? (
                     <button
                       ref={contractorBtnRef}
                       type="button"
-                      onClick={() => onOpenContractor!(formatPermitField(permit, f))}
-                      aria-label={`View contractor profile for ${formatPermitField(permit, f)}`}
+                      onClick={() => onOpenContractor!(value)}
+                      aria-label={`View contractor profile for ${value}`}
                       style={{
                         background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
                         font: 'inherit', color: '#93c5fd', textAlign: 'left',
                         textDecoration: 'underline', textUnderlineOffset: 2, wordBreak: 'break-word',
                       }}>
-                      {formatPermitField(permit, f)}
+                      {value}
                     </button>
                   ) : (
-                    formatPermitField(permit, f)
+                    value
                   )}
                 </div>
               </Fragment>
