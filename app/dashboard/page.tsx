@@ -2,12 +2,15 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
-import { apiFetch, getSavedLeads, saveLead } from '../../lib/api';
+import { apiFetch, getSavedLeads, saveLead, getCoverage, type CountyCoverage } from '../../lib/api';
 import { saveLeadPermitId, canSaveLead, savedIdsAfter } from '../../lib/saveLeadState';
 import {
   buildPermitsPath, commitDelayMs, createLatest,
   showPermitEmptyState, showPermitFooter, csvDisabled,
 } from '../../lib/liveSearch';
+import {
+  effectiveRange, isValidCustomRange, formatHuman, type DatePreset, type DateRange,
+} from '../../lib/dateRange';
 import { buildPermitCsv, createExportFilename } from '../../lib/csv';
 import { sortPermits, SORT_OPTIONS, nextSortForColumn, sortIndicatorForColumn, type SortOption, type SortColumn } from '../../lib/sort';
 import { INITIAL_VISIBLE, shownCount, shouldShowLoadMore, nextVisibleCount } from '../../lib/tableView';
@@ -152,11 +155,21 @@ export default function Dashboard() {
   const [savingLeadId, setSavingLeadId] = useState<string | null>(null);
   const [saveLeadError, setSaveLeadError] = useState(false);
 
+  // PR2: historical date-range controls (server-side date filtering via /permits?date_from/date_to).
+  const [datePreset, setDatePreset] = useState<DatePreset>('all');   // default 'all' = current no-date behavior
+  const [dateFrom, setDateFrom] = useState('');                      // custom-range inputs (YYYY-MM-DD)
+  const [dateTo, setDateTo] = useState('');
+  const [coverage, setCoverage] = useState<CountyCoverage | null>(null);  // county history bounds
+  const [coverageError, setCoverageError] = useState(false);              // non-fatal "History range unavailable"
+  const [committedRange, setCommittedRange] = useState<DateRange>({ from: null, to: null }); // what's actually sent
+  const latestCoverage = useRef(createLatest());                     // newest-wins guard for coverage on county switch
+  const covBounds = coverage ? { from: coverage.history_start, to: coverage.history_end } : null;
+
   // Reset the visible window whenever the result set meaningfully changes (county / trade /
   // committed query / sort). Keyed on committedQuery (not the raw keystroke `search`), so the window
   // resets once per committed search, not on every character. Applying a saved search flows through
   // these setters, so it resets too. Opening/closing the drawer never touches these deps.
-  useEffect(() => { setVisibleCount(INITIAL_VISIBLE); }, [county, tradeFilter, committedQuery, sortOption]);
+  useEffect(() => { setVisibleCount(INITIAL_VISIBLE); }, [county, tradeFilter, committedQuery, sortOption, committedRange.from, committedRange.to]);
 
   // Live search: commit the trimmed query ~275 ms after typing stops. Blank/cleared commits
   // immediately (commitDelayMs → 0), so clearing the box instantly reloads the unfiltered list.
@@ -275,7 +288,7 @@ export default function Dashboard() {
     const requestId = latestPermits.current.begin();
     const controller = new AbortController();
     setPermitsLoading(true);
-    apiFetch(buildPermitsPath(county, limits.permits, committedQuery), getToken, { signal: controller.signal })
+    apiFetch(buildPermitsPath(county, limits.permits, committedQuery, committedRange.from, committedRange.to), getToken, { signal: controller.signal })
       .then(r => r.json())
       .then(p => {
         if (!latestPermits.current.isCurrent(requestId)) return; // a newer search superseded this one
@@ -288,7 +301,34 @@ export default function Dashboard() {
         setPermitsLoading(false);
       });
     return () => controller.abort();
-  }, [county, limits.permits, getToken, committedQuery]);
+  }, [county, limits.permits, getToken, committedQuery, committedRange.from, committedRange.to]);
+
+  // Coverage fetch — separate, non-blocking. Refetches on county change (newest-wins + abort so a
+  // fast switch can't show stale bounds). Failure (404 not-covered / 503 / network) → coverageError,
+  // which only degrades the History control; permit search stays fully usable.
+  useEffect(() => {
+    if (!county) { setCoverage(null); setCoverageError(false); return; }
+    const id = latestCoverage.current.begin();
+    const controller = new AbortController();
+    setCoverage(null); setCoverageError(false);
+    getCoverage(county, getToken, controller.signal)
+      .then(c => { if (latestCoverage.current.isCurrent(id)) setCoverage(c); })
+      .catch(err => {
+        if (err?.name === 'AbortError' || !latestCoverage.current.isCurrent(id)) return;
+        setCoverageError(true);
+      });
+    return () => controller.abort();
+  }, [county, getToken]);
+
+  // Reset the date control to "All available" when the county changes (bounds differ per county).
+  useEffect(() => { setDatePreset('all'); setDateFrom(''); setDateTo(''); }, [county]);
+
+  // Commit the effective range to send. Presets/all commit immediately; an INVALID custom range does
+  // NOT commit (issues no request), so typing a half-entered custom range never fires a fetch.
+  useEffect(() => {
+    if (datePreset === 'custom' && !isValidCustomRange(dateFrom || null, dateTo || null)) return;
+    setCommittedRange(effectiveRange(datePreset, dateFrom || null, dateTo || null, covBounds));
+  }, [datePreset, dateFrom, dateTo, coverage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Phase B: digest CTA -> switch to the Opportunity Queue and scroll it into view.
   const goToQueue = () => {
@@ -739,6 +779,62 @@ export default function Dashboard() {
                     </button>
                   </div>
 
+                  {/* History date range — server-side (GET /permits?date_from/date_to). Presets are
+                      anchored to the county's available_date_to (NOT today) so ingestion lag can't
+                      yield an empty window. "All available" omits the params (current behavior). */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+                    <label htmlFor="pm-history-preset" style={{ fontSize: 12, fontWeight: 700, color: '#93c5fd' }}>History</label>
+                    <select
+                      id="pm-history-preset"
+                      value={datePreset}
+                      onChange={e => setDatePreset(e.target.value as DatePreset)}
+                      disabled={coverageError}
+                      aria-label="Permit history date range"
+                      style={{ padding: '9px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                        background: '#0d1529', border: '1px solid #1e293b', color: '#e2e8f0', cursor: 'pointer' }}>
+                      <option value="all" style={{ background: '#0d1529' }}>All available</option>
+                      <option value="7d" style={{ background: '#0d1529' }}>Last 7 days</option>
+                      <option value="30d" style={{ background: '#0d1529' }}>Last 30 days</option>
+                      <option value="90d" style={{ background: '#0d1529' }}>Last 90 days</option>
+                      <option value="custom" style={{ background: '#0d1529' }}>Custom range</option>
+                    </select>
+                    {datePreset === 'custom' && (() => {
+                      const invalid = !!(dateFrom || dateTo) && !isValidCustomRange(dateFrom || null, dateTo || null);
+                      const inputStyle = { padding: '8px 10px', borderRadius: 8, fontSize: 12,
+                        background: '#0d1529', border: '1px solid #1e293b', color: '#e2e8f0' } as const;
+                      return (
+                        <>
+                          <label htmlFor="pm-date-from" style={{ fontSize: 12, color: '#64748b' }}>From</label>
+                          <input id="pm-date-from" type="date" value={dateFrom}
+                            onChange={e => setDateFrom(e.target.value)}
+                            min={covBounds?.from || undefined} max={covBounds?.to || undefined}
+                            aria-label="History from date" aria-invalid={invalid}
+                            aria-describedby={invalid ? 'pm-date-error' : undefined} style={inputStyle} />
+                          <label htmlFor="pm-date-to" style={{ fontSize: 12, color: '#64748b' }}>To</label>
+                          <input id="pm-date-to" type="date" value={dateTo}
+                            onChange={e => setDateTo(e.target.value)}
+                            min={covBounds?.from || undefined} max={covBounds?.to || undefined}
+                            aria-label="History to date" aria-invalid={invalid}
+                            aria-describedby={invalid ? 'pm-date-error' : undefined} style={inputStyle} />
+                          <button type="button" className="pm-btn-secondary"
+                            onClick={() => { setDatePreset('all'); setDateFrom(''); setDateTo(''); }}>Reset</button>
+                          {invalid && (
+                            <span id="pm-date-error" role="alert" style={{ fontSize: 12, color: '#f87171' }}>
+                              Enter a valid From date on or before the To date.
+                            </span>
+                          )}
+                        </>
+                      );
+                    })()}
+                    {coverageError ? (
+                      <span role="status" style={{ fontSize: 12, color: '#64748b' }}>History range unavailable</span>
+                    ) : covBounds?.from && covBounds?.to ? (
+                      <span style={{ fontSize: 12, color: '#64748b' }}>
+                        Available history: {formatHuman(covBounds.from)} – {formatHuman(covBounds.to)}
+                      </span>
+                    ) : null}
+                  </div>
+
                   {/* Saved searches (device-local; applies county/trade/keyword/sort) */}
                   <SavedSearches
                     current={{ county, tradeFilter, search, sortOption }}
@@ -883,9 +979,13 @@ export default function Dashboard() {
                     )}
                     {showPermitEmptyState(permitsLoading, displayedPermits.length) && (
                       <div style={{ padding: 40, textAlign: 'center', color: '#475569' }}>
-                        {search
-                          ? 'No permits match your search and current filters.'
-                          : 'No permits found for this filter.'}
+                        {(committedRange.from || committedRange.to)
+                          ? ((search || tradeFilter)
+                              ? 'No permits match your filters in this date range.'
+                              : 'No permits were found in this date range.')
+                          : (search
+                              ? 'No permits match your search and current filters.'
+                              : 'No permits found for this filter.')}
                       </div>
                     )}
                     {tier === 'starter' && permits.length >= 50 && (
