@@ -56,6 +56,10 @@ export interface CountyCoverage {
   history_start: string | null;   // available_date_from (ISO)
   history_end: string | null;     // available_date_to (ISO)
   permit_count: number | null;
+  // PRC: the API declares the county's date dimension; the dashboard renders it verbatim.
+  date_basis: string;             // "issued" | "opened" (defaults to "issued" if API omits)
+  date_label: string;             // e.g. "Permit issued" | "Record opened"
+  date_range_available: boolean;
 }
 
 export async function getCoverage(
@@ -66,11 +70,17 @@ export async function getCoverage(
   const r = await apiFetch(`/coverage?county=${encodeURIComponent(county)}`, getToken, { signal });
   if (!r.ok) throw new Error(`coverage_${r.status}`);
   const j = await r.json();
+  const basis = j.date_basis === 'opened' ? 'opened' : 'issued';
   return {
     county: j.county ?? county,
-    history_start: j.history_start ?? null,
-    history_end: j.history_end ?? null,
+    history_start: j.history_start ?? j.available_date_from ?? null,
+    history_end: j.history_end ?? j.available_date_to ?? null,
     permit_count: typeof j.permit_count === 'number' ? j.permit_count : null,
+    date_basis: basis,
+    date_label: (typeof j.date_label === 'string' && j.date_label.trim())
+      ? j.date_label.trim()
+      : (basis === 'opened' ? 'Record opened' : 'Permit issued'),
+    date_range_available: j.date_range_available !== false,
   };
 }
 

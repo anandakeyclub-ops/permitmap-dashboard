@@ -4,6 +4,8 @@
 //
 // Field pickers mirror lib/csv / lib/search / page.tsx (UPPER_SNAKE with lowercase fallbacks).
 
+import { DATE_BASIS_FIELDS } from './dateBasis';
+
 export type SortOption =
   | '' | 'newest' | 'oldest' | 'value_desc' | 'value_asc' | 'permit_asc' | 'address_asc';
 
@@ -17,7 +19,11 @@ export const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: 'address_asc', label: 'Address A–Z' },
 ];
 
-const DATE_KEYS = ['LAST_ISSUED_DATE', 'last_issued_date', 'permit_date', 'issue_date'];
+// Date sort keys = the union of every basis's date fields (issued first, then opened). A row
+// carries exactly one basis's date, so this picks the right one regardless of the county's basis
+// (an opened-basis county like Citrus sorts by OPENED_DATE). Sourced from the canonical basis
+// field lists so a future date field added there flows into sorting with zero changes here.
+const DATE_KEYS = [...DATE_BASIS_FIELDS.issued, ...DATE_BASIS_FIELDS.opened];
 const VALUE_KEYS = ['FINAL_VALUATION', 'final_valuation', 'value', 'valuation'];
 const PERMIT_KEYS = ['PERMITNO', 'permit_no', 'permit_number', 'permit_id'];
 const ADDR_KEYS = ['FULL_ADDRESS', 'full_address', 'address'];

@@ -45,6 +45,8 @@ export interface PermitRow {
   final_valuation?: string | number;
   LAST_ISSUED_DATE?: string;
   last_issued_date?: string;
+  OPENED_DATE?: string;        // opened-basis counties (e.g. Citrus) carry this instead of an issue date
+  opened_date?: string;
   PERMIT_DESCRIPTION?: string;
   permit_description?: string;
   RECORD_TYPE?: string;
