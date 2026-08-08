@@ -1,6 +1,8 @@
 // Pure, dependency-injected provisioning logic for the Stripe webhook (testable without Next).
 // The route wrapper injects the real Stripe + Clerk clients and the emit/alert callbacks.
 
+import { evaluateOnboarding } from './onboarding';
+
 export const PRICE_TO_TIER: Record<string, string> = {
   'price_1TMtSHIgaDPbFgUVPElPgL8V': 'starter',
   'price_1TMtStIgaDPbFgUVPFOUjBMW': 'pro',
@@ -86,7 +88,7 @@ function isForeignActiveSubscription(pm: Record<string, any> | null, incomingSub
 // No auto-cancel/refund — cancellation stays a human/sweep decision (per operator policy).
 async function applyEntitlement(
   stripe: StripeLike, clerk: ClerkLike, alert: Alert, targetUserId: string,
-  args: { customerId: string; subId: string; tier: string }, metadata: Record<string, any>,
+  args: { customerId: string; subId: string; tier: string; email?: string | null }, metadata: Record<string, any>,
 ): Promise<void> {
   const pm = await readPublicMetadata(clerk, targetUserId);
   if (isForeignActiveSubscription(pm, args.subId)) {
@@ -97,7 +99,22 @@ async function applyEntitlement(
     await persistMapping(stripe, args.customerId, args.subId, targetUserId); // traceability only
     return; // do NOT overwrite the original entitlement/binding
   }
-  await clerk.users.updateUserMetadata(targetUserId, { publicMetadata: metadata });
+  // P4: (re)compute onboarding_complete from EXISTING selections + this tier — never deleting
+  // selections (upgrade may complete it; downgrade over-limit stays incomplete for review). A
+  // brand-new paid signup with no selections is stamped onboarding_complete=false, so a Belman-
+  // shaped customer is flagged at provision time, not silently treated as onboarded. Guarded on
+  // getUser so injected test clients without it keep the prior payload unchanged.
+  let payload = metadata;
+  if (clerk.users.getUser) {
+    const selectedCounties = (metadata.allowed_counties as string[]) || (pm?.allowed_counties as string[]) || [];
+    const complete = evaluateOnboarding({
+      tier: args.tier, allowed_counties: selectedCounties,
+      selected_trades: (pm?.selected_trades as string[]) || [],
+      email: args.email || 'clerk-user',   // a resolved Clerk user always has an email
+    }).complete;
+    payload = { ...metadata, onboarding_complete: complete };
+  }
+  await clerk.users.updateUserMetadata(targetUserId, { publicMetadata: payload });
   await persistMapping(stripe, args.customerId, args.subId, targetUserId);
 }
 

@@ -256,6 +256,19 @@ export default function Dashboard() {
     if (user) setShowWelcome(user.publicMetadata?.firstLogin !== false);
   }, [user]);
 
+  // P4 onboarding gate: a paying customer whose product configuration is incomplete (no real
+  // county/trade selection — banner dismissal is NOT completion) is routed into /onboarding.
+  // Flag-gated (NEXT_PUBLIC_ONBOARDING_GATE=1) so existing customers are not auto-bounced before
+  // they are classified/backfilled (P4 Phase 7). The /onboarding page preserves saved selections.
+  useEffect(() => {
+    if (!user || process.env.NEXT_PUBLIC_ONBOARDING_GATE !== '1') return;
+    const paid = ['starter', 'pro', 'team'].includes(tier);
+    const complete = user.publicMetadata?.onboarding_complete === true;
+    if (paid && !complete && typeof window !== 'undefined' && window.location.pathname !== '/onboarding') {
+      window.location.href = '/onboarding';
+    }
+  }, [user, tier]);
+
   // Load summary + scored + digest when county changes. Permits are fetched SEPARATELY (below) so a
   // keyword search re-fetches only the permits list — not the Opportunity queue, summary, or digest.
   useEffect(() => {
