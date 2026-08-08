@@ -46,6 +46,10 @@ export interface ClerkLike {
     getUserList: (p: { emailAddress: string[] }) => Promise<{ totalCount: number; data: { id: string }[] }>;
     updateUserMetadata: (id: string, p: { publicMetadata: Record<string, any> }) => Promise<any>;
     createUser: (p: { emailAddress: string[]; publicMetadata: Record<string, any>; skipPasswordRequirement?: boolean }) => Promise<{ id: string }>;
+    // Optional: read an existing user's publicMetadata so provisioning can detect a SECOND
+    // active subscription and refuse to clobber the first binding. Absent in older mocks →
+    // the guard is a no-op and behavior is unchanged (last-write-wins as before).
+    getUser?: (id: string) => Promise<{ publicMetadata?: Record<string, any> } | null>;
   };
 }
 export interface StripeLike {
@@ -59,6 +63,42 @@ type Emit = (name: string, props: Record<string, any>) => Promise<void>;
 async function persistMapping(stripe: StripeLike, customerId: string, subId: string, clerkUserId: string) {
   try { await stripe.customers.update(customerId, { metadata: { clerk_user_id: clerkUserId } }); } catch (e) { /* best-effort */ }
   try { await stripe.subscriptions.update(subId, { metadata: { clerk_user_id: clerkUserId } }); } catch (e) { /* best-effort */ }
+}
+
+// Read a user's existing publicMetadata (no-op if the Clerk client can't getUser).
+async function readPublicMetadata(clerk: ClerkLike, userId: string): Promise<Record<string, any> | null> {
+  if (!clerk.users.getUser) return null;
+  try { const u = await clerk.users.getUser(userId); return (u?.publicMetadata as Record<string, any>) || null; }
+  catch { return null; }
+}
+
+// True when the user already has an ACTIVE subscription that is DIFFERENT from the incoming one —
+// i.e. a genuine duplicate. Same sub id (trial→paid, plan change, event re-delivery) is NOT a
+// duplicate. A cancelled prior sub (billing_status='cancelled') is NOT a duplicate (they resubscribed).
+function isForeignActiveSubscription(pm: Record<string, any> | null, incomingSubId: string): boolean {
+  return !!pm && pm.billing_status === 'active'
+    && !!pm.stripe_subscription_id && pm.stripe_subscription_id !== incomingSubId;
+}
+
+// Write entitlement to a resolved Clerk user — UNLESS a different active subscription is already
+// bound. In that case we protect the original binding, alert, and stamp the duplicate's Stripe
+// objects with the clerk id for traceability (so the Revenue-Integrity sweep can reconcile it).
+// No auto-cancel/refund — cancellation stays a human/sweep decision (per operator policy).
+async function applyEntitlement(
+  stripe: StripeLike, clerk: ClerkLike, alert: Alert, targetUserId: string,
+  args: { customerId: string; subId: string; tier: string }, metadata: Record<string, any>,
+): Promise<void> {
+  const pm = await readPublicMetadata(clerk, targetUserId);
+  if (isForeignActiveSubscription(pm, args.subId)) {
+    alert('duplicate_subscription', {
+      clerk_user_id: targetUserId, existing_subscription_id: pm!.stripe_subscription_id,
+      new_subscription_id: args.subId, customer_id: args.customerId, tier: args.tier,
+    });
+    await persistMapping(stripe, args.customerId, args.subId, targetUserId); // traceability only
+    return; // do NOT overwrite the original entitlement/binding
+  }
+  await clerk.users.updateUserMetadata(targetUserId, { publicMetadata: metadata });
+  await persistMapping(stripe, args.customerId, args.subId, targetUserId);
 }
 
 // Idempotent. Prefer linking by Clerk user id (durable); fall back to email (create if
@@ -79,8 +119,7 @@ export async function provision(
     metadata.allowed_counties = [args.county];
   }
   if (args.clerkUserId) {
-    await clerk.users.updateUserMetadata(args.clerkUserId, { publicMetadata: metadata });
-    await persistMapping(stripe, args.customerId, args.subId, args.clerkUserId);
+    await applyEntitlement(stripe, clerk, alert, args.clerkUserId, args, metadata);
     return;
   }
   alert('identity_missing_at_checkout', { email: args.email, customerId: args.customerId, subId: args.subId, tier: args.tier });
@@ -92,8 +131,7 @@ export async function provision(
   }
   const existing = await clerk.users.getUserList({ emailAddress: [args.email] });
   if (existing.totalCount > 0) {
-    await clerk.users.updateUserMetadata(existing.data[0].id, { publicMetadata: metadata });
-    await persistMapping(stripe, args.customerId, args.subId, existing.data[0].id);
+    await applyEntitlement(stripe, clerk, alert, existing.data[0].id, args, metadata);
   } else {
     const created = await clerk.users.createUser({ emailAddress: [args.email], publicMetadata: metadata, skipPasswordRequirement: true });
     await persistMapping(stripe, args.customerId, args.subId, created.id);

@@ -47,16 +47,37 @@ export interface StripeCheckoutLike {
       create: (params: Record<string, any>, options?: { idempotencyKey?: string }) => Promise<{ url: string | null }>;
     };
   };
+  // Optional authoritative duplicate check. When present AND a customer id is known, we ask
+  // Stripe directly whether the user already has a live subscription (catches the case where
+  // the Clerk billing metadata is stale/missing). Absent in unit mocks → we fall back to the
+  // Clerk-metadata signal only. Injected by the route with the real Stripe client.
+  subscriptions?: {
+    // `status` is loosely typed so the real Stripe client (whose param is a narrow Status union)
+    // remains assignable to this interface under strictFunctionTypes contravariance.
+    list: (params: { customer: string; status?: any; limit?: number }) => Promise<{ data: Array<{ status: string }> }>;
+  };
 }
+
+// A subscription in any of these Stripe states means the user already has (or is mid-billing) a
+// plan — starting a second checkout would create a duplicate paid subscription.
+const LIVE_SUB_STATES = new Set(['trialing', 'active', 'past_due', 'unpaid']);
 
 // Returns {status, body}. Never creates a session unless there is an authenticated user,
 // a valid plan, and an email. A deterministic idempotency key (Clerk user + plan + intent
 // nonce) makes duplicate submissions of the SAME intent reuse one Session, never duplicate.
+//
+// DUPLICATE-SUBSCRIPTION GUARD (highest financial risk): a signed-in user who already has an
+// active plan must NOT be able to start a second checkout (the incident: two $149 Pro subs from
+// two checkouts ~11 min apart). We block here — the primary guard — and return 409 so the client
+// routes them to Manage Billing. The webhook is the backstop for races/direct-Stripe creations.
 export async function handleCheckout(deps: {
   userId: string | null;
   email: string | null;
   plan: string | undefined;
   existingCustomer?: string;
+  // Current entitlement snapshot from Clerk publicMetadata (read by the route). Cheap primary signal.
+  existingSubscriptionId?: string;
+  billingStatus?: string;
   appUrl: string;
   attribution?: IntentParams | null;
   stripe: StripeCheckoutLike;
@@ -64,6 +85,30 @@ export async function handleCheckout(deps: {
   if (!deps.userId) return { status: 401, body: { error: 'authentication required' } };
   if (!isPlan(deps.plan) || !PRICE_BY_PLAN[deps.plan]) return { status: 400, body: { error: `unknown plan: ${deps.plan}` } };
   if (!deps.email) return { status: 400, body: { error: 'no email on Clerk user' } };
+
+  // ── duplicate-subscription guard ──
+  // (1) cheap Clerk-metadata signal: an active plan already recorded on the user.
+  const clerkSaysActive = deps.billingStatus === 'active' && !!deps.existingSubscriptionId;
+  // (2) authoritative Stripe check when a customer id + list() are available (non-fatal on error).
+  let stripeSaysActive = false;
+  if (!clerkSaysActive && deps.existingCustomer && deps.stripe.subscriptions?.list) {
+    try {
+      const subs = await deps.stripe.subscriptions.list({ customer: deps.existingCustomer, status: 'all', limit: 100 });
+      stripeSaysActive = (subs?.data || []).some((s) => LIVE_SUB_STATES.has(s.status));
+    } catch { /* treat as inconclusive; fall back to the Clerk signal only */ }
+  }
+  if (clerkSaysActive || stripeSaysActive) {
+    return {
+      status: 409,
+      body: {
+        error: 'active_subscription_exists',
+        code: 'active_subscription_exists',
+        manage_billing: true,
+        message: 'You already have an active PermitMap plan. Manage or change it from billing.',
+      },
+    };
+  }
+
   const idempotencyKey = checkoutIdempotencyKey(deps.userId, deps.plan, deps.attribution);
   const session = await deps.stripe.checkout.sessions.create(
     buildCheckoutParams({

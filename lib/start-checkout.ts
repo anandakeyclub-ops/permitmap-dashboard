@@ -17,7 +17,7 @@ export interface StartCheckoutDeps {
 export async function startCheckout(
   plan: 'starter' | 'pro' | 'team',
   deps: StartCheckoutDeps = {},
-): Promise<{ action: 'checkout' | 'signin' | 'error'; url?: string }> {
+): Promise<{ action: 'checkout' | 'signin' | 'active_subscription' | 'error'; url?: string }> {
   const f = deps.fetchFn || (typeof fetch !== 'undefined' ? fetch : undefined);
   const nav = deps.navigate || ((u: string) => { if (typeof window !== 'undefined') window.location.href = u; });
   const path = deps.currentPath || (typeof window !== 'undefined' ? window.location.pathname : '/pricing');
@@ -33,6 +33,13 @@ export async function startCheckout(
     const url = `/sign-in?redirect_url=${encodeURIComponent(path)}`;
     nav(url);
     return { action: 'signin', url };
+  }
+  // Duplicate-subscription guard: the user already has an active plan → send them to Manage
+  // Billing instead of creating a second subscription. Never start a new checkout here.
+  if (res.status === 409) {
+    const url = '/dashboard?billing=manage';
+    nav(url);
+    return { action: 'active_subscription', url };
   }
   const data = await res.json().catch(() => ({} as any));
   if (data && data.url) {

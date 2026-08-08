@@ -20,15 +20,21 @@ export async function POST(req: NextRequest) {
 
   let email: string | null = null;
   let existingCustomer: string | undefined;
+  let existingSubscriptionId: string | undefined;
+  let billingStatus: string | undefined;
   if (userId) {
     const clerk = await clerkClient();
     const user = await clerk.users.getUser(userId);
     email = user.primaryEmailAddress?.emailAddress || user.emailAddresses[0]?.emailAddress || null;
     existingCustomer = (user.publicMetadata?.stripe_customer_id as string) || undefined;
+    // Duplicate-subscription guard inputs: current entitlement snapshot from Clerk publicMetadata.
+    existingSubscriptionId = (user.publicMetadata?.stripe_subscription_id as string) || undefined;
+    billingStatus = (user.publicMetadata?.billing_status as string) || undefined;
   }
 
   const { status, body } = await handleCheckout({
-    userId, email, plan, existingCustomer, appUrl: APP_URL, attribution, stripe,
+    userId, email, plan, existingCustomer, existingSubscriptionId, billingStatus,
+    appUrl: APP_URL, attribution, stripe,
   });
   return NextResponse.json(body, { status });
 }
