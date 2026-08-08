@@ -44,9 +44,14 @@ export async function saveOnboardingSelections(input: { counties: string[]; trad
 
   const email = user.primaryEmailAddress?.emailAddress || user.emailAddresses?.[0]?.emailAddress || null;
   const result = evaluateOnboarding(
-    { tier, allowed_counties: cv.cleaned, selected_trades: tv.cleaned, email }, supported);
+    { tier, selected_counties: cv.cleaned, selected_trades: tv.cleaned, email }, supported);
+  // Write only the keys we own — canonical selected_counties/selected_trades + onboarding state.
+  // We do NOT write allowed_counties (that legacy field is read-only for backward compatibility).
   await client.users.updateUserMetadata(userId, {
-    publicMetadata: { allowed_counties: cv.cleaned, selected_trades: tv.cleaned, onboarding_complete: result.complete },
+    publicMetadata: {
+      selected_counties: cv.cleaned, selected_trades: tv.cleaned,
+      onboarding_complete: result.complete, onboarding_state: result.state, onboarding_reasons: result.reasons,
+    },
   });
   return { ok: true, complete: result.complete, errors: [] };
 }

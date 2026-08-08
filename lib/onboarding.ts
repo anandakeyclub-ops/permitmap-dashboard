@@ -1,35 +1,45 @@
 // Onboarding Completion Contract (P4) — pure, server-authoritative logic (no I/O).
 //
-// The incident: a Pro customer had tier=pro (allowance 5) but NEVER selected a county, so
-// allowed_counties was null and they silently received no permits — yet were treated as onboarded.
-// This module eliminates the conflation of "the plan ALLOWS N counties" with "the customer SELECTED
-// these counties". onboarding_complete is true ONLY when a real, valid configuration exists.
+// The incident: a Pro customer had tier=pro (allowance 5) but NEVER selected a county, so they
+// silently received no permits — yet were treated as onboarded. This eliminates the conflation of
+// "the plan ALLOWS N counties" (a number, derived from tier) with "the customer SELECTED these
+// counties" (a list).
 //
-// Field semantics (see the P4 storage decision):
-//   entitlement_county_limit = number the plan allows (derived from tier)   ← a limit, never a list
-//   selected_counties        = concrete canonical county slugs the customer chose (allowed_counties)
-//   selected_trades          = concrete canonical trade slugs the customer chose
-//   onboarding_complete      = evaluateOnboarding(...).complete
+//   county_limit       = TIER_COUNTY_LIMIT[tier]                 ← a number, never a selection
+//   selected_counties  = publicMetadata.selected_counties        ← canonical slug list (new field)
+//   selected_trades    = publicMetadata.selected_trades          ← canonical trade list (new field)
+//   onboarding_state   = evaluateOnboarding(...).state           ← not_started|incomplete|needs_review|complete
+//
+// Legacy: an older field `publicMetadata.allowed_counties` held the selection as a slug LIST. We
+// migrate it as the selection ONLY when it is a real list of slugs — a numeric allowance like "5"
+// is NEVER interpreted as a selection. New writes use `selected_counties`.
 
-// Canonical trade taxonomy for the dashboard. Mirrors permit_bot team_report.SUPPORTED_TRADES —
-// keep these in sync (there is no cross-repo shared source today).
+// Canonical trade taxonomy (7 slugs). Confirmed 2026-08-08 as the committed platform-wide set
+// (matches permitmap-api main.py TRADES + permit_bot trades.py). generator/foundation are county
+// SOURCE-coverage concerns, NOT selectable trades. Keep in sync across repos (no shared module).
 export const SUPPORTED_TRADES = [
   'roofing', 'hvac', 'plumbing', 'electrical', 'pool', 'solar', 'general_contractor',
 ] as const;
 export type Trade = typeof SUPPORTED_TRADES[number];
 const TRADE_ALIASES: Record<string, string> = { general_contractors: 'general_contractor', gc: 'general_contractor' };
 
-// Numeric county ALLOWANCE per tier (mirrors provisioning.TIER_COUNTIES). This is a limit only.
 export const TIER_COUNTY_LIMIT: Record<string, number> = { starter: 1, pro: 5, team: 99 };
-// Tiers that grant ALL counties → no per-county selection required (mirrors provisioning.ALL_COUNTY_TIERS).
 export const ALL_COUNTY_TIERS = new Set<string>(['team']);
 export const PAID_TIERS = new Set<string>(['starter', 'pro', 'team']);
+
+// Onboarding states (richer than a boolean so the lifecycle monitor can alert on the real failure).
+export const ONBOARDING_STATES = { NOT_STARTED: 'not_started', INCOMPLETE: 'incomplete', NEEDS_REVIEW: 'needs_review', COMPLETE: 'complete' } as const;
+export type OnboardingStateName = typeof ONBOARDING_STATES[keyof typeof ONBOARDING_STATES];
+// Canonical reason codes (stable; consumed by alerts/monitor).
+export const REASONS = {
+  MISSING_COUNTY: 'missing_county', MISSING_TRADE: 'missing_trade', OVER_LIMIT: 'over_county_limit',
+  INVALID_COUNTY: 'invalid_county', INVALID_TRADE: 'invalid_trade', MISSING_EMAIL: 'missing_delivery_email',
+} as const;
 
 export function entitlementCountyLimit(tier?: string): number {
   return TIER_COUNTY_LIMIT[tier || ''] ?? 0;
 }
 
-// Canonical slug normalizers (match lib/entitlement.normalizeCounty + provisioning.resolveSelectedCounty).
 export function normalizeCountySlug(s: string): string {
   return String(s || '').trim().toLowerCase().replace(/[.\s-]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
 }
@@ -38,11 +48,18 @@ export function normalizeTradeSlug(s: string): string {
   return TRADE_ALIASES[n] || n;
 }
 
+// Read the customer's SELECTED counties from Clerk publicMetadata, honoring the legacy field.
+// Canonical `selected_counties` wins; else legacy `allowed_counties` ONLY if it's a real slug list.
+// A numeric/string/absent value (e.g. the "5" allowance) is NEVER a selection.
+export function migrateLegacySelectedCounties(pm: Record<string, any> | null | undefined): string[] {
+  if (!pm) return [];
+  if (Array.isArray(pm.selected_counties)) return pm.selected_counties.filter((c: any) => typeof c === 'string' && c.trim());
+  if (Array.isArray(pm.allowed_counties)) return pm.allowed_counties.filter((c: any) => typeof c === 'string' && c.trim());
+  return [];
+}
+
 export interface Validation { ok: boolean; cleaned: string[]; errors: string[] }
 
-// Validate + canonicalize + dedup selected counties, enforcing the tier limit SERVER-SIDE.
-// `supportedSlugs` is the authoritative county list (from the API /counties); when empty the
-// supported-membership check is skipped (caller could not load it) but limit/count still apply.
 export function validateSelectedCounties(raw: string[] | undefined, tier: string, supportedSlugs: string[] = []): Validation {
   const errors: string[] = [];
   const limit = entitlementCountyLimit(tier);
@@ -51,7 +68,7 @@ export function validateSelectedCounties(raw: string[] | undefined, tier: string
   const cleaned: string[] = [];
   for (const c of raw || []) {
     const s = normalizeCountySlug(c);
-    if (!s || seen.has(s)) continue;         // drop blanks + duplicates deterministically
+    if (!s || seen.has(s)) continue;
     seen.add(s);
     if (supported.size && !supported.has(s)) { errors.push(`unsupported_county:${s}`); continue; }
     cleaned.push(s);
@@ -63,7 +80,6 @@ export function validateSelectedCounties(raw: string[] | undefined, tier: string
   return { ok: errors.length === 0, cleaned, errors };
 }
 
-// Validate + canonicalize + dedup selected trades against the canonical taxonomy.
 export function validateSelectedTrades(raw: string[] | undefined): Validation {
   const errors: string[] = [];
   const supported = new Set<string>(SUPPORTED_TRADES as readonly string[]);
@@ -82,56 +98,52 @@ export function validateSelectedTrades(raw: string[] | undefined): Validation {
 
 export interface OnboardingState {
   tier?: string | null;
-  allowed_counties?: string[] | null;   // selected counties (NOT the numeric allowance)
+  selected_counties?: string[] | null;   // the customer's chosen counties (NOT the numeric allowance)
   selected_trades?: string[] | null;
   email?: string | null;
 }
-export interface OnboardingResult { complete: boolean; reasons: string[]; needs_review: boolean }
+export interface OnboardingResult { state: OnboardingStateName; complete: boolean; reasons: string[]; needs_review: boolean }
 
-// The completion predicate. complete=true ONLY when a real, valid, in-limit configuration exists.
-// needs_review=true flags a config that became invalid without the customer's action (e.g. a
-// downgrade left more selected counties than the new tier allows) — we never silently delete.
+// complete ONLY when a real, valid, in-limit config + a trade + a delivery email exist. reasons use
+// canonical codes for the lifecycle monitor.
 export function evaluateOnboarding(s: OnboardingState, supportedSlugs: string[] = []): OnboardingResult {
+  const tier = s.tier || '';
+  if (!PAID_TIERS.has(tier)) return { state: ONBOARDING_STATES.NOT_STARTED, complete: false, reasons: ['no_paid_tier'], needs_review: false };
+
   const reasons: string[] = [];
   let needs_review = false;
-  const tier = s.tier || '';
-  if (!PAID_TIERS.has(tier)) return { complete: false, reasons: ['no_paid_tier'], needs_review: false };
-  if (!s.email) reasons.push('no_delivery_email');
+  if (!s.email) reasons.push(REASONS.MISSING_EMAIL);
 
-  const counties = s.allowed_counties || [];
-  const limit = entitlementCountyLimit(tier);
+  const counties = s.selected_counties || [];
   if (!ALL_COUNTY_TIERS.has(tier)) {
     if (counties.length === 0) {
-      reasons.push('no_county_selected');
+      reasons.push(REASONS.MISSING_COUNTY);
     } else {
       const cv = validateSelectedCounties(counties, tier, supportedSlugs);
-      if (cv.errors.some((e) => e.startsWith('unsupported_county'))) reasons.push('invalid_county');
-      if (cv.cleaned.length > limit) { reasons.push('over_county_limit'); needs_review = true; }
+      if (cv.errors.some((e) => e.startsWith('unsupported_county'))) { reasons.push(REASONS.INVALID_COUNTY); needs_review = true; }
+      if (cv.cleaned.length > entitlementCountyLimit(tier)) { reasons.push(REASONS.OVER_LIMIT); needs_review = true; }
     }
   }
 
   const trades = s.selected_trades || [];
-  if (trades.length === 0) reasons.push('no_trade_selected');
-  else if (validateSelectedTrades(trades).errors.some((e) => e.startsWith('unsupported_trade'))) reasons.push('invalid_trade');
+  if (trades.length === 0) reasons.push(REASONS.MISSING_TRADE);
+  else if (validateSelectedTrades(trades).errors.some((e) => e.startsWith('unsupported_trade'))) { reasons.push(REASONS.INVALID_TRADE); needs_review = true; }
 
-  return { complete: reasons.length === 0, reasons, needs_review };
+  const state = reasons.length === 0 ? ONBOARDING_STATES.COMPLETE
+    : needs_review ? ONBOARDING_STATES.NEEDS_REVIEW : ONBOARDING_STATES.INCOMPLETE;
+  return { state, complete: state === ONBOARDING_STATES.COMPLETE, reasons, needs_review };
 }
 
 export type OnboardingClass = 'onboarding_complete' | 'onboarding_incomplete' | 'invalid_configuration';
-
-// Classify an existing customer WITHOUT mutating or fabricating selections (P4 Phase 7).
 export function classifyOnboarding(s: OnboardingState, supportedSlugs: string[] = []): OnboardingClass {
-  const r = evaluateOnboarding(s, supportedSlugs);
-  if (r.complete) return 'onboarding_complete';
-  if (r.needs_review || r.reasons.some((x) => x.startsWith('invalid_'))) return 'invalid_configuration';
+  const st = evaluateOnboarding(s, supportedSlugs).state;
+  if (st === ONBOARDING_STATES.COMPLETE) return 'onboarding_complete';
+  if (st === ONBOARDING_STATES.NEEDS_REVIEW) return 'invalid_configuration';
   return 'onboarding_incomplete';
 }
 
-// Recompute onboarding_complete after a plan change WITHOUT deleting selections (P4 Phase 9).
-// Upgrade → limit grows, selections preserved, may now be complete. Downgrade over the new limit →
-// complete=false + needs_review (selections kept for the customer to trim). Returns the metadata
-// patch to persist (only onboarding_complete; selections are never auto-removed here).
-export function recomputeOnboardingOnTierChange(s: OnboardingState, supportedSlugs: string[] = []): { onboarding_complete: boolean; needs_review: boolean } {
+// Recompute onboarding after a plan change WITHOUT deleting selections (Phase 9).
+export function recomputeOnboardingOnTierChange(s: OnboardingState, supportedSlugs: string[] = []): { onboarding_complete: boolean; onboarding_state: OnboardingStateName; needs_review: boolean } {
   const r = evaluateOnboarding(s, supportedSlugs);
-  return { onboarding_complete: r.complete, needs_review: r.needs_review };
+  return { onboarding_complete: r.complete, onboarding_state: r.state, needs_review: r.needs_review };
 }

@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { apiFetch } from '../../lib/api';
-import { SUPPORTED_TRADES, entitlementCountyLimit, ALL_COUNTY_TIERS } from '../../lib/onboarding';
+import { SUPPORTED_TRADES, entitlementCountyLimit, ALL_COUNTY_TIERS, migrateLegacySelectedCounties } from '../../lib/onboarding';
 import { saveOnboardingSelections } from '../actions';
 
 interface CountyOpt { key: string; label: string; count?: number }
@@ -30,7 +30,7 @@ export default function OnboardingPage() {
   // Pre-fill from existing selections (resume) once the user is loaded.
   useEffect(() => {
     if (!isLoaded || !user) return;
-    setSelCounties((user.publicMetadata?.allowed_counties as string[]) || []);
+    setSelCounties(migrateLegacySelectedCounties(user.publicMetadata as any));
     setSelTrades((user.publicMetadata?.selected_trades as string[]) || []);
   }, [isLoaded, user]);
 

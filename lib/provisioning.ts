@@ -1,7 +1,7 @@
 // Pure, dependency-injected provisioning logic for the Stripe webhook (testable without Next).
 // The route wrapper injects the real Stripe + Clerk clients and the emit/alert callbacks.
 
-import { evaluateOnboarding } from './onboarding';
+import { evaluateOnboarding, migrateLegacySelectedCounties } from './onboarding';
 
 export const PRICE_TO_TIER: Record<string, string> = {
   'price_1TMtSHIgaDPbFgUVPElPgL8V': 'starter',
@@ -106,13 +106,15 @@ async function applyEntitlement(
   // getUser so injected test clients without it keep the prior payload unchanged.
   let payload = metadata;
   if (clerk.users.getUser) {
-    const selectedCounties = (metadata.allowed_counties as string[]) || (pm?.allowed_counties as string[]) || [];
-    const complete = evaluateOnboarding({
-      tier: args.tier, allowed_counties: selectedCounties,
+    // Prefer the county on THIS event's metadata; else the customer's existing selection (canonical
+    // selected_counties, or a legacy allowed_counties LIST — never a numeric allowance).
+    const selectedCounties = (metadata.selected_counties as string[]) || migrateLegacySelectedCounties(pm);
+    const r = evaluateOnboarding({
+      tier: args.tier, selected_counties: selectedCounties,
       selected_trades: (pm?.selected_trades as string[]) || [],
       email: args.email || 'clerk-user',   // a resolved Clerk user always has an email
-    }).complete;
-    payload = { ...metadata, onboarding_complete: complete };
+    });
+    payload = { ...metadata, onboarding_complete: r.complete, onboarding_state: r.state, onboarding_reasons: r.reasons };
   }
   await clerk.users.updateUserMetadata(targetUserId, { publicMetadata: payload });
   await persistMapping(stripe, args.customerId, args.subId, targetUserId);
@@ -128,12 +130,12 @@ export async function provision(
     tier: args.tier, stripe_customer_id: args.customerId, stripe_subscription_id: args.subId,
     counties_allowed: TIER_COUNTIES[args.tier] || 1, billing_status: 'active',
   };
-  // County-limited tiers (starter/pro) must carry the SPECIFIC selected county as
-  // allowed_counties, or the weekly digest is ineligible ("no county configured for
-  // county-limited tier"). Team grants all counties, so this is skipped. Only set when a
-  // county is known, so an event without county metadata never clobbers an existing list.
+  // County-limited tiers (starter/pro) carry the SPECIFIC selected county as the canonical
+  // selected_counties (a checkout-metadata county IS a customer selection). Team grants all
+  // counties, so skipped. Only set when a county is known, so an event without county metadata
+  // never clobbers an existing selection. (New field; legacy allowed_counties is read, not written.)
   if (!ALL_COUNTY_TIERS.has(args.tier) && args.county) {
-    metadata.allowed_counties = [args.county];
+    metadata.selected_counties = [args.county];
   }
   if (args.clerkUserId) {
     await applyEntitlement(stripe, clerk, alert, args.clerkUserId, args, metadata);
