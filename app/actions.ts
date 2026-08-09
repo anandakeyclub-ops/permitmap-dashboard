@@ -3,6 +3,58 @@
 // Server-side Clerk metadata mutations. publicMetadata is server-write-only, so
 // these run with the Clerk secret key on the server (never exposed to the client).
 import { auth, clerkClient } from '@clerk/nextjs/server';
+import {
+  PAID_TIERS, validateSelectedCounties, validateSelectedTrades, evaluateOnboarding,
+} from '../lib/onboarding';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://permitmap-api.onrender.com';
+
+export interface SaveOnboardingResult { ok: boolean; complete: boolean; errors: string[] }
+
+/**
+ * P4 Onboarding Completion Contract — persist a paying customer's EXPLICIT county + trade
+ * selections and (re)compute onboarding_complete. This is the ONLY place a customer's
+ * selected_counties are written outside the Stripe webhook, and it enforces the tier limit
+ * SERVER-SIDE (client validation is never sufficient). It writes only the keys it owns
+ * (allowed_counties, selected_trades, onboarding_complete) — never clobbering tier/billing_status.
+ */
+export async function saveOnboardingSelections(input: { counties: string[]; trades: string[] }): Promise<SaveOnboardingResult> {
+  const { userId, getToken } = await auth();
+  if (!userId) return { ok: false, complete: false, errors: ['unauthenticated'] };
+  const client = await clerkClient();
+  const user = await client.users.getUser(userId);
+  const tier = (user.publicMetadata?.tier as string) || 'preview';
+  if (!PAID_TIERS.has(tier)) return { ok: false, complete: false, errors: ['not_a_paid_plan'] };
+
+  // Authoritative supported-county list from the API (server-side — the client cannot be trusted
+  // to send a valid taxonomy). Best-effort: if it can't load, county membership is not enforced
+  // here but the tier LIMIT + non-empty checks still apply.
+  let supported: string[] = [];
+  try {
+    const token = await getToken();
+    const res = await fetch(`${API_URL}/counties`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    const data = await res.json();
+    supported = (data?.counties || []).map((c: any) => c.key).filter(Boolean);
+  } catch { /* leave supported empty → membership check skipped, limit/count still enforced */ }
+
+  const cv = validateSelectedCounties(input.counties, tier, supported);
+  const tv = validateSelectedTrades(input.trades);
+  const errors = [...cv.errors, ...tv.errors];
+  if (errors.length) return { ok: false, complete: false, errors };
+
+  const email = user.primaryEmailAddress?.emailAddress || user.emailAddresses?.[0]?.emailAddress || null;
+  const result = evaluateOnboarding(
+    { tier, selected_counties: cv.cleaned, selected_trades: tv.cleaned, email }, supported);
+  // Write only the keys we own — canonical selected_counties/selected_trades + onboarding state.
+  // We do NOT write allowed_counties (that legacy field is read-only for backward compatibility).
+  await client.users.updateUserMetadata(userId, {
+    publicMetadata: {
+      selected_counties: cv.cleaned, selected_trades: tv.cleaned,
+      onboarding_complete: result.complete, onboarding_state: result.state, onboarding_reasons: result.reasons,
+    },
+  });
+  return { ok: true, complete: result.complete, errors: [] };
+}
 
 /**
  * Promote the signup county into publicMetadata (PART A).

@@ -15,6 +15,7 @@ import { buildPermitCsv, createExportFilename } from '../../lib/csv';
 import { sortPermits, SORT_OPTIONS, nextSortForColumn, sortIndicatorForColumn, type SortOption, type SortColumn } from '../../lib/sort';
 import { INITIAL_VISIBLE, shownCount, shouldShowLoadMore, nextVisibleCount } from '../../lib/tableView';
 import { isCountyLocked, defaultEntitledCounty, upgradeMessageForCounty } from '../../lib/entitlement';
+import { migrateLegacySelectedCounties } from '../../lib/onboarding';
 import CallList from './_components/CallList';
 import DigestCard from './_components/DigestCard';
 import UpgradeModal from './_components/UpgradeModal';
@@ -121,7 +122,8 @@ export default function Dashboard() {
   const tier = (user?.publicMetadata?.tier as string) || 'preview';
   const limits = TIER_LIMITS[tier] || TIER_LIMITS.preview;
   // Authoritative entitlement for the selector: which specific counties this user may open.
-  const allowedCounties = (user?.publicMetadata?.allowed_counties as string[]) || [];
+  // Canonical selected_counties, with legacy allowed_counties (slug list only) migrated in.
+  const allowedCounties = migrateLegacySelectedCounties(user?.publicMetadata as any);
 
   const [counties, setCounties]     = useState<any[]>([]);
   const [county, setCounty]         = useState('');  // '' until resolved (localStorage / Clerk metadata) or user picks
@@ -255,6 +257,19 @@ export default function Dashboard() {
   useEffect(() => {
     if (user) setShowWelcome(user.publicMetadata?.firstLogin !== false);
   }, [user]);
+
+  // P4 onboarding gate: a paying customer whose product configuration is incomplete (no real
+  // county/trade selection — banner dismissal is NOT completion) is routed into /onboarding.
+  // Flag-gated (NEXT_PUBLIC_ONBOARDING_GATE=1) so existing customers are not auto-bounced before
+  // they are classified/backfilled (P4 Phase 7). The /onboarding page preserves saved selections.
+  useEffect(() => {
+    if (!user || process.env.NEXT_PUBLIC_ONBOARDING_GATE !== '1') return;
+    const paid = ['starter', 'pro', 'team'].includes(tier);
+    const complete = user.publicMetadata?.onboarding_complete === true;
+    if (paid && !complete && typeof window !== 'undefined' && window.location.pathname !== '/onboarding') {
+      window.location.href = '/onboarding';
+    }
+  }, [user, tier]);
 
   // Load summary + scored + digest when county changes. Permits are fetched SEPARATELY (below) so a
   // keyword search re-fetches only the permits list — not the Opportunity queue, summary, or digest.
