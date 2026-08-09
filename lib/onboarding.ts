@@ -17,6 +17,7 @@
 // Canonical trade taxonomy (7 slugs). Confirmed 2026-08-08 as the committed platform-wide set
 // (matches permitmap-api main.py TRADES + permit_bot trades.py). generator/foundation are county
 // SOURCE-coverage concerns, NOT selectable trades. Keep in sync across repos (no shared module).
+export const TRADE_TAXONOMY_VERSION = 1;   // must match permit_bot trades.py + permitmap-api
 export const SUPPORTED_TRADES = [
   'roofing', 'hvac', 'plumbing', 'electrical', 'pool', 'solar', 'general_contractor',
 ] as const;
@@ -125,9 +126,10 @@ export function evaluateOnboarding(s: OnboardingState, supportedSlugs: string[] 
     }
   }
 
+  // Trade required for county-limited delivery; team delivers via an all-trades fallback → optional.
   const trades = s.selected_trades || [];
-  if (trades.length === 0) reasons.push(REASONS.MISSING_TRADE);
-  else if (validateSelectedTrades(trades).errors.some((e) => e.startsWith('unsupported_trade'))) { reasons.push(REASONS.INVALID_TRADE); needs_review = true; }
+  if (!ALL_COUNTY_TIERS.has(tier) && trades.length === 0) reasons.push(REASONS.MISSING_TRADE);
+  else if (trades.length && validateSelectedTrades(trades).errors.some((e) => e.startsWith('unsupported_trade'))) { reasons.push(REASONS.INVALID_TRADE); needs_review = true; }
 
   const state = reasons.length === 0 ? ONBOARDING_STATES.COMPLETE
     : needs_review ? ONBOARDING_STATES.NEEDS_REVIEW : ONBOARDING_STATES.INCOMPLETE;

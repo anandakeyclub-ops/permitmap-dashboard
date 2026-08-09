@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   validateSelectedCounties, validateSelectedTrades, evaluateOnboarding, classifyOnboarding,
   recomputeOnboardingOnTierChange, entitlementCountyLimit, migrateLegacySelectedCounties,
-  SUPPORTED_TRADES, ONBOARDING_STATES, REASONS,
+  SUPPORTED_TRADES, ONBOARDING_STATES, REASONS, TRADE_TAXONOMY_VERSION,
 } from '../lib/onboarding';
 import { handleWebhook } from '../lib/provisioning';
 
@@ -63,10 +63,16 @@ it('trades: required, canonicalized, aliases mapped, unsupported rejected', () =
   expect(validateSelectedTrades(['foundation']).errors).toContain('unsupported_trade:foundation');
 });
 
-// ── team tier: all counties, but a trade is still required ──────────────────────
-it('team needs no county selection but still needs a trade', () => {
+// ── team tier: all counties + all-trades fallback → neither county nor trade required ──
+it('team needs no county AND no trade (delivers via fallback); invalid trade still rejected', () => {
+  expect(evaluateOnboarding({ tier: 'team', selected_counties: [], selected_trades: [], email: 'a@x.com' }).complete).toBe(true);
   expect(evaluateOnboarding({ tier: 'team', selected_counties: [], selected_trades: ['roofing'], email: 'a@x.com' }).complete).toBe(true);
-  expect(evaluateOnboarding({ tier: 'team', selected_counties: [], selected_trades: [], email: 'a@x.com' }).reasons).toContain(REASONS.MISSING_TRADE);
+  expect(evaluateOnboarding({ tier: 'team', selected_counties: [], selected_trades: ['unicorn'], email: 'a@x.com' }).reasons).toContain(REASONS.INVALID_TRADE);
+});
+
+it('canonical trade taxonomy is version 1 (7 slugs)', () => {
+  expect(TRADE_TAXONOMY_VERSION).toBe(1);
+  expect([...SUPPORTED_TRADES]).toEqual(['roofing', 'hvac', 'plumbing', 'electrical', 'pool', 'solar', 'general_contractor']);
 });
 
 // ── delivery email ──────────────────────────────────────────────────────────────
