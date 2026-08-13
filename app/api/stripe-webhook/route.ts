@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { clerkClient } from '@clerk/nextjs/server';
 import { handleWebhook } from '../../../lib/provisioning';
+import { wrapClerkWithRateLimitRetry, wrapStripeWithIdempotentMapping } from '../../../lib/webhook-clients';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2023-10-16' });
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://permitmap-api.onrender.com';
@@ -28,9 +29,10 @@ function alertProvisioning(kind: string, detail: Record<string, any>) {
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = req.headers.get('stripe-signature') || '';
-  const clerk = await clerkClient();
+  const clerk = wrapClerkWithRateLimitRetry(await clerkClient());
+  const safeStripe = wrapStripeWithIdempotentMapping(stripe);
   const { status, body: resBody } = await handleWebhook({
-    stripe: stripe as any,
+    stripe: safeStripe as any,
     clerk: clerk as any,
     body,
     sig,
