@@ -53,7 +53,27 @@ export async function saveOnboardingSelections(input: { counties: string[]; trad
       onboarding_complete: result.complete, onboarding_state: result.state, onboarding_reasons: result.reasons,
     },
   });
+  // Seam 3 resume: if onboarding is now complete and this customer's trial was interlocked
+  // (pause_collection set by the trial_will_end handler), clear the pause so normal billing resumes.
+  // Best-effort — never blocks the save; no charge is created here.
+  if (result.complete) {
+    try { await resumeInterlockIfPaused(user.publicMetadata?.stripe_subscription_id as string | undefined); }
+    catch { /* resume is best-effort; the webhook / a later save will reconcile */ }
+  }
   return { ok: true, complete: result.complete, errors: [] };
+}
+
+/** Clear a Stripe pause_collection interlock once onboarding is complete. No-op if not configured
+ *  or the subscription is not paused. Uses RESUME_PARAMS from the canonical lifecycle module. */
+async function resumeInterlockIfPaused(subId?: string): Promise<void> {
+  if (!subId || !process.env.STRIPE_SECRET_KEY) return;
+  const { default: Stripe } = await import('stripe');
+  const { RESUME_PARAMS } = await import('../lib/lifecycle');
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  const sub = await stripe.subscriptions.retrieve(subId);
+  if ((sub as any).pause_collection) {
+    await stripe.subscriptions.update(subId, RESUME_PARAMS as any);
+  }
 }
 
 /**

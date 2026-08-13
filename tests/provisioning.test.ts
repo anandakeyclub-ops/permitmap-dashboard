@@ -283,3 +283,66 @@ describe('county entitlement provisioning', () => {
     expect(written).not.toHaveProperty('selected_counties');
   });
 });
+
+describe('seam 3 — trial→first-charge interlock (customer.subscription.trial_will_end)', () => {
+  it('incomplete Pro onboarding → pauses collection (withholds the first charge)', async () => {
+    const s = fakeStripe({ clerk_user_id: 'user_x' }, PRICE_PRO);   // Pro needs county + trade
+    const clerk = fakeClerk();                                       // no getUser → pm null → incomplete
+    const alert = vi.fn(); const emitSpy = vi.fn(async () => {});
+    const body = evt('customer.subscription.trial_will_end', {
+      id: 'sub_i', customer: 'cus_1', items: { data: [{ price: { id: PRICE_PRO } }] }, metadata: { clerk_user_id: 'user_x' } });
+    const r = await handleWebhook({ stripe: s as any, clerk: clerk as any, body, sig: 'x', secret: 'sec', emit: emitSpy, alert });
+    expect(r.status).toBe(200);
+    expect(s._subsUpdate).toHaveBeenCalledWith('sub_i', expect.objectContaining({
+      pause_collection: expect.objectContaining({ behavior: 'void' }) }));
+    expect(alert).toHaveBeenCalledWith('billing_interlock_triggered', expect.anything());
+  });
+
+  it('complete Pro onboarding → does NOT pause (normal conversion)', async () => {
+    const s = fakeStripe({ clerk_user_id: 'user_x' }, PRICE_PRO);
+    const clerk = fakeClerk();
+    (clerk.users as any).getUser = vi.fn(async () => ({
+      publicMetadata: { selected_counties: ['marion'], selected_trades: ['roofing'], delivery_email: 'x@co.com' } }));
+    const alert = vi.fn(); const emitSpy = vi.fn(async () => {});
+    const body = evt('customer.subscription.trial_will_end', {
+      id: 'sub_ok', customer: 'cus_1', items: { data: [{ price: { id: PRICE_PRO } }] }, metadata: { clerk_user_id: 'user_x' } });
+    await handleWebhook({ stripe: s as any, clerk: clerk as any, body, sig: 'x', secret: 'sec', emit: emitSpy, alert });
+    expect(s._subsUpdate).not.toHaveBeenCalled();
+    expect(emitSpy).toHaveBeenCalledWith('trial_product_ready', expect.anything());
+  });
+
+  it('idempotent: an already-paused trial_will_end re-delivery is a strict no-op', async () => {
+    const s = fakeStripe({ clerk_user_id: 'user_x' }, PRICE_PRO);
+    const clerk = fakeClerk();
+    const alert = vi.fn(); const emitSpy = vi.fn(async () => {});
+    const body = evt('customer.subscription.trial_will_end', {
+      id: 'sub_i', customer: 'cus_1', items: { data: [{ price: { id: PRICE_PRO } }] },
+      metadata: { clerk_user_id: 'user_x' }, pause_collection: { behavior: 'void' } });
+    await handleWebhook({ stripe: s as any, clerk: clerk as any, body, sig: 'x', secret: 'sec', emit: emitSpy, alert });
+    expect(s._subsUpdate).not.toHaveBeenCalled();
+    expect(alert).not.toHaveBeenCalledWith('billing_interlock_triggered', expect.anything());
+    expect(emitSpy).not.toHaveBeenCalledWith('trial_product_ready', expect.anything());
+  });
+
+  it('FIX 1: a paused subscription is provisioned billing_status=paused (excluded from MRR)', async () => {
+    const s = fakeStripe({ clerk_user_id: 'user_x' }, PRICE_PRO);
+    const clerk = fakeClerk(); const alert = vi.fn(); const emitSpy = vi.fn(async () => {});
+    const body = evt('customer.subscription.updated', {
+      id: 'sub_p', customer: 'cus_1', status: 'active', items: { data: [{ price: { id: PRICE_PRO } }] },
+      metadata: { clerk_user_id: 'user_x' }, pause_collection: { behavior: 'void' } });
+    await handleWebhook({ stripe: s as any, clerk: clerk as any, body, sig: 'x', secret: 'sec', emit: emitSpy, alert });
+    const written = (clerk.updateUserMetadata.mock.calls.at(-1) as any)[1].publicMetadata;
+    expect(written.billing_status).toBe('paused');
+  });
+
+  it('non-paused subscription.updated stays billing_status=active (no regression)', async () => {
+    const s = fakeStripe({ clerk_user_id: 'user_x' }, PRICE_PRO);
+    const clerk = fakeClerk(); const alert = vi.fn(); const emitSpy = vi.fn(async () => {});
+    const body = evt('customer.subscription.updated', {
+      id: 'sub_a', customer: 'cus_1', status: 'active', items: { data: [{ price: { id: PRICE_PRO } }] },
+      metadata: { clerk_user_id: 'user_x' } });
+    await handleWebhook({ stripe: s as any, clerk: clerk as any, body, sig: 'x', secret: 'sec', emit: emitSpy, alert });
+    const written = (clerk.updateUserMetadata.mock.calls.at(-1) as any)[1].publicMetadata;
+    expect(written.billing_status).toBe('active');
+  });
+});
