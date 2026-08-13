@@ -125,11 +125,15 @@ async function applyEntitlement(
 // absent) and ALERT that identity was missing at checkout.
 export async function provision(
   stripe: StripeLike, clerk: ClerkLike, alert: Alert,
-  args: { email: string | null; tier: string; customerId: string; subId: string; clerkUserId: string | null; county?: string | null },
+  args: { email: string | null; tier: string; customerId: string; subId: string; clerkUserId: string | null; county?: string | null; paused?: boolean },
 ): Promise<void> {
   const metadata: Record<string, any> = {
     tier: args.tier, stripe_customer_id: args.customerId, stripe_subscription_id: args.subId,
-    counties_allowed: TIER_COUNTIES[args.tier] || 1, billing_status: 'active',
+    // A subscription with pause_collection set (the Seam-3 interlock) becomes status=active at trial
+    // end but is NOT billed ($0, invoices voided). Do NOT stamp it 'active' (permit_bot counts that
+    // as active_paid MRR) — mark 'paused' so it is excluded from paying revenue and surfaces as a
+    // distinct lifecycle exception. Reset to 'active' on resume (onboarding completion).
+    counties_allowed: TIER_COUNTIES[args.tier] || 1, billing_status: args.paused ? 'paused' : 'active',
   };
   // County-limited tiers (starter/pro) carry the SPECIFIC selected county as the canonical
   // selected_counties (a checkout-metadata county IS a customer selection). Team grants all
@@ -181,7 +185,7 @@ export async function handleStripeEvent(
       const tier = PRICE_TO_TIER[sub.items.data[0]?.price?.id || ''] || 'starter';
       const clerkUserId = resolveClerkUserId(s.metadata, s.client_reference_id) || resolveClerkUserId(sub.metadata, null);
       const county = resolveSelectedCounty(s.metadata) || resolveSelectedCounty(sub.metadata);
-      await provision(stripe, clerk, alert, { email, tier, customerId: custId, subId, clerkUserId, county });
+      await provision(stripe, clerk, alert, { email, tier, customerId: custId, subId, clerkUserId, county, paused: !!sub.pause_collection });
       await emit('trial_started', { client_reference_id: s.client_reference_id || undefined, stripe_session_id: s.id, stripe_subscription_id: subId, email: email || undefined, plan: tier, properties: { customer_id: custId, subscription_status: sub.status, clerk_user_id: clerkUserId || undefined } });
     }
   } else if (event.type === 'invoice.payment_succeeded') {
@@ -194,7 +198,7 @@ export async function handleStripeEvent(
       const clerkUserId = resolveClerkUserId(sub.metadata, null);
       const email = inv.customer_email || (await emailFromCustomer(stripe, custId));
       const county = resolveSelectedCounty(sub.metadata);
-      await provision(stripe, clerk, alert, { email, tier, customerId: custId, subId, clerkUserId, county });
+      await provision(stripe, clerk, alert, { email, tier, customerId: custId, subId, clerkUserId, county, paused: !!sub.pause_collection });
       await emit('paid_subscription_started', { stripe_subscription_id: subId, email: email || undefined, plan: tier, properties: { invoice_id: inv.id, amount_paid: inv.amount_paid, clerk_user_id: clerkUserId || undefined } });
     }
   } else if (event.type === 'customer.subscription.created' || event.type === 'customer.subscription.updated') {
@@ -204,7 +208,7 @@ export async function handleStripeEvent(
     const clerkUserId = resolveClerkUserId(sub.metadata, null);
     const email = await emailFromCustomer(stripe, custId);
     const county = resolveSelectedCounty(sub.metadata);
-    await provision(stripe, clerk, alert, { email, tier, customerId: custId, subId: sub.id, clerkUserId, county });
+    await provision(stripe, clerk, alert, { email, tier, customerId: custId, subId: sub.id, clerkUserId, county, paused: !!sub.pause_collection });
   } else if (event.type === 'customer.subscription.deleted') {
     const sub = event.data.object;
     const clerkUserId = resolveClerkUserId(sub.metadata, null);
@@ -230,7 +234,12 @@ export async function handleStripeEvent(
       tier, subStatus: 'trialing',
       selected_counties: pm?.selected_counties, selected_trades: pm?.selected_trades, email,
     });
-    if (decision.action === 'pause' && !sub.pause_collection) {
+    // Idempotent: if the interlock is ALREADY applied (pause_collection set), a re-delivered or
+    // duplicate trial_will_end event is a strict no-op — no second pause, no duplicate/misleading
+    // emit. Setting pause is itself idempotent in Stripe, but we also avoid re-emitting.
+    if (sub.pause_collection) {
+      // already interlocked — nothing to do
+    } else if (decision.action === 'pause') {
       await stripe.subscriptions.update(sub.id, PAUSE_PARAMS);
       alert('billing_interlock_triggered', {
         subscription_id: sub.id, customer_id: custId, clerk_user_id: clerkUserId || undefined,
