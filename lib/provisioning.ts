@@ -2,6 +2,7 @@
 // The route wrapper injects the real Stripe + Clerk clients and the emit/alert callbacks.
 
 import { evaluateOnboarding, migrateLegacySelectedCounties } from './onboarding';
+import { interlockDecision, PAUSE_PARAMS } from './lifecycle';
 
 export const PRICE_TO_TIER: Record<string, string> = {
   'price_1TMtSHIgaDPbFgUVPElPgL8V': 'starter',
@@ -212,6 +213,38 @@ export async function handleStripeEvent(
     else {
       const email = await emailFromCustomer(stripe, sub.customer as string);
       if (email) { const ex = await clerk.users.getUserList({ emailAddress: [email] }); if (ex.totalCount > 0) await clerk.users.updateUserMetadata(ex.data[0].id, { publicMetadata: meta }); }
+    }
+  } else if (event.type === 'customer.subscription.trial_will_end') {
+    // Seam 3 — trial → first-charge interlock. Stripe fires this ~3 days before the trial ends.
+    // If the canonical onboarding contract is NOT complete, withhold the first charge by pausing
+    // collection (reversible), preserving the subscription + data. Prevents the Freitas failure
+    // (a customer charged for a product that was never deliverable). Does NOT enable delivery
+    // enforcement and never cancels/refunds.
+    const sub = event.data.object;
+    const tier = PRICE_TO_TIER[sub.items.data[0]?.price?.id || ''] || 'starter';
+    const custId = sub.customer as string;
+    const clerkUserId = resolveClerkUserId(sub.metadata, null);
+    const pm = clerkUserId ? await readPublicMetadata(clerk, clerkUserId) : null;
+    const email = pm?.delivery_email || (await emailFromCustomer(stripe, custId));
+    const decision = interlockDecision({
+      tier, subStatus: 'trialing',
+      selected_counties: pm?.selected_counties, selected_trades: pm?.selected_trades, email,
+    });
+    if (decision.action === 'pause' && !sub.pause_collection) {
+      await stripe.subscriptions.update(sub.id, PAUSE_PARAMS);
+      alert('billing_interlock_triggered', {
+        subscription_id: sub.id, customer_id: custId, clerk_user_id: clerkUserId || undefined,
+        tier, state: decision.state, reason: decision.reason,
+      });
+      await emit('billing_interlock_triggered', {
+        stripe_subscription_id: sub.id, email: email || undefined, plan: tier,
+        properties: { customer_id: custId, clerk_user_id: clerkUserId || undefined, lifecycle_state: decision.state, reason: decision.reason },
+      });
+    } else {
+      await emit('trial_product_ready', {
+        stripe_subscription_id: sub.id, email: email || undefined, plan: tier,
+        properties: { customer_id: custId, clerk_user_id: clerkUserId || undefined, lifecycle_state: decision.state },
+      });
     }
   }
 }

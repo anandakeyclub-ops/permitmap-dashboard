@@ -283,3 +283,31 @@ describe('county entitlement provisioning', () => {
     expect(written).not.toHaveProperty('selected_counties');
   });
 });
+
+describe('seam 3 — trial→first-charge interlock (customer.subscription.trial_will_end)', () => {
+  it('incomplete Pro onboarding → pauses collection (withholds the first charge)', async () => {
+    const s = fakeStripe({ clerk_user_id: 'user_x' }, PRICE_PRO);   // Pro needs county + trade
+    const clerk = fakeClerk();                                       // no getUser → pm null → incomplete
+    const alert = vi.fn(); const emitSpy = vi.fn(async () => {});
+    const body = evt('customer.subscription.trial_will_end', {
+      id: 'sub_i', customer: 'cus_1', items: { data: [{ price: { id: PRICE_PRO } }] }, metadata: { clerk_user_id: 'user_x' } });
+    const r = await handleWebhook({ stripe: s as any, clerk: clerk as any, body, sig: 'x', secret: 'sec', emit: emitSpy, alert });
+    expect(r.status).toBe(200);
+    expect(s._subsUpdate).toHaveBeenCalledWith('sub_i', expect.objectContaining({
+      pause_collection: expect.objectContaining({ behavior: 'void' }) }));
+    expect(alert).toHaveBeenCalledWith('billing_interlock_triggered', expect.anything());
+  });
+
+  it('complete Pro onboarding → does NOT pause (normal conversion)', async () => {
+    const s = fakeStripe({ clerk_user_id: 'user_x' }, PRICE_PRO);
+    const clerk = fakeClerk();
+    (clerk.users as any).getUser = vi.fn(async () => ({
+      publicMetadata: { selected_counties: ['marion'], selected_trades: ['roofing'], delivery_email: 'x@co.com' } }));
+    const alert = vi.fn(); const emitSpy = vi.fn(async () => {});
+    const body = evt('customer.subscription.trial_will_end', {
+      id: 'sub_ok', customer: 'cus_1', items: { data: [{ price: { id: PRICE_PRO } }] }, metadata: { clerk_user_id: 'user_x' } });
+    await handleWebhook({ stripe: s as any, clerk: clerk as any, body, sig: 'x', secret: 'sec', emit: emitSpy, alert });
+    expect(s._subsUpdate).not.toHaveBeenCalled();
+    expect(emitSpy).toHaveBeenCalledWith('trial_product_ready', expect.anything());
+  });
+});
