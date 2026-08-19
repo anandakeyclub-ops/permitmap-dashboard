@@ -24,6 +24,10 @@ export const INTENT_FIELDS = [
   'county', 'trade', 'state', 'campaign', 'source', 'name', 'email',
   'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
   'ref', 'gclid', 'fbclid',
+  // conversion-attribution transport: the first-party page the checkout CTA fired on. Carried to
+  // Stripe metadata for permit_bot to resolve to a canonical asset (checkout-touch). Sanitized on
+  // read; never a PermitMap asset_id (asset resolution belongs to permit_bot).
+  'source_path',
 ] as const;
 
 // Subset attached to Stripe metadata: attribution/context only — NO PII (name/email
@@ -32,7 +36,35 @@ export const METADATA_FIELDS = [
   'county', 'trade', 'state', 'campaign', 'source',
   'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
   'ref', 'gclid', 'fbclid',
+  'source_path',
 ] as const;
+
+// Max stored length for source_path (well under Stripe's 500-char per-value metadata limit).
+export const MAX_SOURCE_PATH = 512;
+
+/**
+ * Normalize/validate a first-party `source_path` for the conversion-attribution transport. Returns a
+ * clean relative path (leading "/", no query/fragment, collapsed / no trailing slash) or `null` when
+ * the value is missing / oversized / external / malformed. This NEVER resolves to a PermitMap asset —
+ * canonical `path → asset_id` resolution belongs to permit_bot. It only guarantees a safe, first-party
+ * path string: rejects external origins, protocol-relative URLs, scheme URIs (javascript:/data:/…),
+ * backslashes, whitespace, and control characters. Missing/invalid → null (fail-closed, never blocks
+ * checkout).
+ */
+export function sanitizeSourcePath(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  let s = v.trim();
+  if (!s || s.length > MAX_SOURCE_PATH) return null;      // blank or oversized → reject
+  s = s.split('#', 1)[0].split('?', 1)[0];                // strip fragment + query
+  if (!s) return null;
+  if (!s.startsWith('/')) return null;                    // external URL / scheme / relative → reject
+  if (s.startsWith('//')) return null;                    // protocol-relative → external → reject
+  if (/[\\\s]/.test(s)) return null;                      // no backslashes / whitespace
+  if (/[\u0000-\u001f\u007f]/.test(s)) return null;       // no control characters
+  s = s.replace(/\/{2,}/g, '/');                          // collapse duplicate slashes
+  if (s.length > 1) s = s.replace(/\/+$/, '');            // drop trailing slash (except root "/")
+  return s || '/';
+}
 
 export type IntentParams = Partial<Record<(typeof INTENT_FIELDS)[number], string>>;
 
@@ -65,6 +97,12 @@ export function readIntent(src: ParamSource): { plan: Plan | null; params: Inten
   for (const f of INTENT_FIELDS) {
     const v = readOne(src, f);
     if (v != null && v !== '') params[f] = v;
+  }
+  // source_path is the one transport field that must be a first-party path — sanitize it as it
+  // enters the intent (drop when invalid) so every downstream consumer sees a clean value or none.
+  if (params.source_path !== undefined) {
+    const clean = sanitizeSourcePath(params.source_path);
+    if (clean) params.source_path = clean; else delete params.source_path;
   }
   return { plan, params };
 }
@@ -100,7 +138,14 @@ export function pickMetadata(attribution?: IntentParams | null): Record<string, 
   if (!attribution) return out;
   for (const f of METADATA_FIELDS) {
     const v = attribution[f];
-    if (v != null && v !== '') out[f] = String(v).slice(0, 500);
+    if (v == null || v === '') continue;
+    if (f === 'source_path') {
+      // Final gate before Stripe: re-sanitize source_path (defense in depth); omit if invalid.
+      const clean = sanitizeSourcePath(v);
+      if (clean) out[f] = clean;
+      continue;
+    }
+    out[f] = String(v).slice(0, 500);
   }
   return out;
 }
