@@ -1,0 +1,3 @@
+# Local migration manifests contain PII (emails) — never commit.
+*.local.json
+dev-users*.json
