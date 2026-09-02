@@ -18,6 +18,11 @@ explicit `apply` + real credentials.**
   from the old dev id to the new prod id.
 - `clerk-import.ts` — `planClerkImport` / `runClerkImport` (DI Clerk client; **dry-run default,
   fail-closed** without prod creds): creates each prod user preserving verified email + public_metadata.
+  **Fail-safe:** if a user is created but its metadata fails verification, that row is a HARD FAIL —
+  it is **not** mapped/accepted (`CREATED_IN_PROD`); its prod id is returned in `cleanup_required` and
+  the run **stops** (remaining users are not created). The orphan is **never auto-deleted** (deletion
+  is a separate explicit step). Re-apply is **blocked** while any row is `CREATED_UNVERIFIED`, so a
+  failed user can't be silently re-created as a duplicate.
 - `rollback.ts` — `buildRollbackManifest`: reverse Stripe relink (restore dev id) + operational steps.
 - `export-dev-users.mjs` — READ-ONLY exporter (`CLERK_SECRET_KEY` from env) → manifest (PII; gitignored).
 
@@ -33,7 +38,10 @@ explicit `apply` + real credentials.**
 
 ## Cutover order (do NOT run without prod creds + Vercel access + explicit approval)
 A. Back up / export dev users (`export-dev-users.mjs`) → manifest.
-B. Create/import prod users (`runClerkImport --apply`, prod creds) preserving metadata.
+B. Create/import prod users (`runClerkImport --apply`, prod creds) preserving metadata. If any row
+   returns in `cleanup_required` (created but unverified), the run halts — record it as
+   `CREATED_UNVERIFIED`, resolve the orphan (delete the prod user or fix its metadata + re-verify)
+   BEFORE re-running apply.
 C. Record old→new user ids into the manifest (`new_prod_user_id`, status `CREATED_IN_PROD`).
 D. Configure Clerk **production** domain/origins/redirect + after-sign-in/up URLs + OAuth callbacks.
 E. Configure the **production** Clerk webhook (endpoint + signing secret).

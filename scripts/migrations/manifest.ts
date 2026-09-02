@@ -8,12 +8,16 @@
 export type MigrationStatus =
   | 'PENDING'
   | 'CREATED_IN_PROD'
+  // Prod user was created but its metadata failed post-create verification. The prod user EXISTS
+  // (its id is recorded) but the row is NOT accepted as migrated. This is a terminal-until-resolved
+  // state: apply is blocked until the orphan is manually cleaned up (or its metadata fixed + re-verified).
+  | 'CREATED_UNVERIFIED'
   | 'STRIPE_RELINKED'
   | 'VERIFIED'
   | 'FAILED';
 
 export const MIGRATION_STATUSES: readonly MigrationStatus[] = [
-  'PENDING', 'CREATED_IN_PROD', 'STRIPE_RELINKED', 'VERIFIED', 'FAILED',
+  'PENDING', 'CREATED_IN_PROD', 'CREATED_UNVERIFIED', 'STRIPE_RELINKED', 'VERIFIED', 'FAILED',
 ] as const;
 
 export interface MigrationRow {
@@ -95,6 +99,10 @@ export function parseManifest(raw: unknown): ParseResult {
 export function validateForApply(rows: MigrationRow[]): { ok: boolean; errors: string[] } {
   const errors: string[] = [];
   for (const r of rows) {
+    // An unverified orphan is NOT a resolved mapping — its id must never feed a downstream apply
+    // (e.g. Stripe relink) until cleanup is resolved. Block explicitly.
+    if (r.migration_status === 'CREATED_UNVERIFIED')
+      errors.push(`${r.old_dev_user_id}: CREATED_UNVERIFIED — cleanup unresolved, resolve before apply`);
     if (!r.new_prod_user_id) errors.push(`${r.old_dev_user_id}: new_prod_user_id not resolved`);
     if (isBillingRow(r)) {
       if (!r.stripe_customer_id) errors.push(`${r.old_dev_user_id}: billing row missing stripe_customer_id`);

@@ -45,47 +45,102 @@ export function planClerkImport(rows: MigrationRow[]): ImportPlanItem[] {
   }));
 }
 
+/** A prod user that WAS created but whose migration was NOT accepted (metadata verification failed).
+ *  The prod user still exists in Clerk; deletion is a separate destructive step left explicit/manual. */
+export interface CleanupItem {
+  old_dev_user_id: string;
+  new_prod_user_id: string;
+  reason: string;
+}
+
 export interface ImportResult {
   ok: boolean;
   reason?: string;
   dryRun: boolean;
-  created: number;
-  mapped: Array<{ old_dev_user_id: string; new_prod_user_id: string }>;
+  created: number;                 // prod users actually created this run (includes any unverified orphan)
+  mapped: Array<{ old_dev_user_id: string; new_prod_user_id: string }>; // ACCEPTED migrations only (→ CREATED_IN_PROD)
+  cleanup_required: CleanupItem[]; // created-but-unverified orphans needing manual resolution (→ CREATED_UNVERIFIED)
+  stoppedEarly: boolean;           // true if we halted the run before processing all rows
   errors: string[];
 }
 
 /** Execute the import. FAIL-CLOSED: if prodCredentialsPresent is false OR no clerk client is injected,
- *  performs NO production operation and returns ok:false. DEFAULT dry-run (created:0, zero writes). */
+ *  performs NO production operation and returns ok:false. DEFAULT dry-run (created:0, zero writes).
+ *
+ *  Fail-safe semantics (apply mode):
+ *   - create succeeds but metadata verification fails ⇒ HARD FAILED row: the created prod user id is
+ *     recorded in cleanup_required (NOT in mapped, NOT accepted as CREATED_IN_PROD), and processing of
+ *     the remaining users STOPS immediately (unexpected prod API behavior must not create the rest of
+ *     the population). The orphan is never auto-deleted — cleanup is explicit/manual.
+ *   - resumable: rows already carrying new_prod_user_id are skipped (no duplicate create); and a prior
+ *     unresolved orphan (migration_status CREATED_UNVERIFIED) BLOCKS apply until it is resolved, so a
+ *     failed/unverified user can never be silently retried as a second duplicate. */
 export async function runClerkImport(
   rows: MigrationRow[],
   opts: { apply?: boolean; prodCredentialsPresent?: boolean; clerk?: ClerkLike } = {},
 ): Promise<ImportResult> {
+  const base = { dryRun: true as boolean, created: 0, mapped: [] as ImportResult['mapped'],
+    cleanup_required: [] as CleanupItem[], stoppedEarly: false, errors: [] as string[] };
   if (!opts.prodCredentialsPresent || !opts.clerk) {
-    return { ok: false, reason: 'NO_PROD_CREDENTIALS', dryRun: true, created: 0, mapped: [], errors: [] };
+    return { ...base, ok: false, reason: 'NO_PROD_CREDENTIALS' };
   }
   if (opts.apply !== true) {
-    return { ok: true, dryRun: true, created: 0, mapped: [], errors: [] };
+    return { ...base, ok: true }; // dry-run: zero writes
   }
-  const mapped: Array<{ old_dev_user_id: string; new_prod_user_id: string }> = [];
+
+  // Resumability gate: never proceed while a prior run left an unresolved created-but-unverified
+  // orphan. Re-running would otherwise re-create the same user (duplicate) or advance past a state
+  // that still needs manual cleanup. Block until those rows are resolved.
+  const unresolved = rows.filter((r) => r.migration_status === 'CREATED_UNVERIFIED');
+  if (unresolved.length) {
+    return {
+      ...base, dryRun: false, ok: false, reason: 'CLEANUP_REQUIRED_UNRESOLVED',
+      cleanup_required: unresolved.map((r) => ({
+        old_dev_user_id: r.old_dev_user_id,
+        new_prod_user_id: r.new_prod_user_id ?? '',
+        reason: 'prior run created this prod user but metadata verification failed; resolve before re-apply',
+      })),
+      errors: [`${unresolved.length} row(s) in CREATED_UNVERIFIED — resolve cleanup before apply`],
+    };
+  }
+
+  const mapped: ImportResult['mapped'] = [];
+  const cleanup_required: CleanupItem[] = [];
   const errors: string[] = [];
   let created = 0;
+  let stoppedEarly = false;
   for (const r of rows) {
-    if (r.new_prod_user_id) continue; // already created (resumable)
+    if (r.new_prod_user_id) continue; // already created/mapped (resumable) — no duplicate create
+    let u: { id: string; publicMetadata?: Record<string, unknown> };
     try {
-      const u = await opts.clerk.users.createUser({
+      u = await opts.clerk.users.createUser({
         emailAddress: [r.primary_email],
         publicMetadata: r.public_metadata,
         skipPasswordRequirement: true,
       });
-      const pres = checkMetadataPreserved(r.public_metadata, u.publicMetadata || {});
-      if (!pres.preserved) {
-        errors.push(`${r.old_dev_user_id}: metadata not preserved (missing=${pres.missingKeys} coerced=${pres.coercedKeys})`);
-      }
-      mapped.push({ old_dev_user_id: r.old_dev_user_id, new_prod_user_id: u.id });
-      created++;
     } catch (e) {
-      errors.push(`${r.old_dev_user_id}: ${String(e).slice(0, 160)}`);
+      // Create itself threw ⇒ no prod artifact created for this row. Record and continue.
+      errors.push(`${r.old_dev_user_id}: create failed: ${String(e).slice(0, 160)}`);
+      continue;
     }
+    created++; // the prod user now exists, verified or not
+    const pres = checkMetadataPreserved(r.public_metadata, u.publicMetadata || {});
+    if (!pres.preserved) {
+      // HARD FAIL: user exists but is NOT accepted. Record as cleanup-required (never mapped), then
+      // STOP — do not create the remaining population if the prod API is misbehaving.
+      cleanup_required.push({
+        old_dev_user_id: r.old_dev_user_id,
+        new_prod_user_id: u.id,
+        reason: `metadata not preserved after create (missing=[${pres.missingKeys}] coerced=[${pres.coercedKeys}]) — prod user ${u.id} created but NOT accepted; delete manually or fix metadata then re-verify`,
+      });
+      errors.push(`${r.old_dev_user_id}: metadata verification FAILED after create (prod user ${u.id}) — HARD FAIL, halting remaining users`);
+      stoppedEarly = true;
+      break;
+    }
+    mapped.push({ old_dev_user_id: r.old_dev_user_id, new_prod_user_id: u.id });
   }
-  return { ok: errors.length === 0, dryRun: false, created, mapped, errors };
+  return {
+    ok: errors.length === 0 && cleanup_required.length === 0,
+    dryRun: false, created, mapped, cleanup_required, stoppedEarly, errors,
+  };
 }

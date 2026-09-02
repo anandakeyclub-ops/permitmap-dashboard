@@ -139,6 +139,90 @@ describe('Clerk import: fail-closed + mapping + preservation', () => {
     expect(res.mapped).toEqual([{ old_dev_user_id: 'user_dev_1', new_prod_user_id: 'user_prod_1' }]);
     expect(res.errors).toEqual([]); // metadata preserved (createUser echoed publicMetadata)
   });
+  it('created user with unpreserved metadata → HARD FAIL, cleanup_required, not mapped, stops', async () => {
+    // Two rows; the FIRST create returns coerced metadata (verification will fail). The importer must
+    // record the created prod user as cleanup_required (not a successful mapping) and must NOT create
+    // the second user.
+    const rows = [
+      billingRow({ old_dev_user_id: 'user_dev_1' }),
+      billingRow({ old_dev_user_id: 'user_dev_2', primary_email: 'b@example.com' }),
+    ];
+    const createUser = vi.fn()
+      .mockImplementationOnce(async () => ({
+        id: 'user_prod_ORPHAN',
+        // metadata comes back coerced (arrays flattened, bool stringified) → preservation fails
+        publicMetadata: { ...rows[0].public_metadata, onboarding_complete: 'true', counties_allowed: 'lee,collier' },
+      }))
+      .mockImplementationOnce(async (p) => ({ id: 'user_prod_2', publicMetadata: p.publicMetadata }));
+    const clerk: ClerkLike = { users: { createUser } };
+    const res = await runClerkImport(rows, { apply: true, prodCredentialsPresent: true, clerk });
+
+    expect(res.ok).toBe(false);                       // hard fail
+    expect(res.dryRun).toBe(false);
+    expect(res.stoppedEarly).toBe(true);
+    expect(createUser).toHaveBeenCalledTimes(1);      // subsequent user NOT created
+    // orphan surfaced separately, with its real prod id, as cleanup-required
+    expect(res.cleanup_required).toEqual([
+      expect.objectContaining({ old_dev_user_id: 'user_dev_1', new_prod_user_id: 'user_prod_ORPHAN' }),
+    ]);
+    // failed row is NOT returned as a successful mapping
+    expect(res.mapped).toEqual([]);
+    expect(res.mapped.find((m) => m.old_dev_user_id === 'user_dev_1')).toBeUndefined();
+  });
+
+  it('resumability: a prior CREATED_UNVERIFIED orphan BLOCKS re-apply (no duplicate retry)', async () => {
+    const clerk: ClerkLike = { users: { createUser: vi.fn() } };
+    const rows = [
+      billingRow({ old_dev_user_id: 'user_dev_1', new_prod_user_id: 'user_prod_ORPHAN', migration_status: 'CREATED_UNVERIFIED' }),
+      billingRow({ old_dev_user_id: 'user_dev_2', primary_email: 'b@example.com' }),
+    ];
+    const res = await runClerkImport(rows, { apply: true, prodCredentialsPresent: true, clerk });
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('CLEANUP_REQUIRED_UNRESOLVED');
+    expect(res.created).toBe(0);
+    expect(clerk.users.createUser).not.toHaveBeenCalled();   // NOTHING re-created while orphan unresolved
+    expect(res.cleanup_required).toEqual([
+      expect.objectContaining({ old_dev_user_id: 'user_dev_1', new_prod_user_id: 'user_prod_ORPHAN' }),
+    ]);
+    // validateForApply also refuses to advance an unverified orphan downstream (e.g. to Stripe relink)
+    expect(validateForApply(rows).errors.some((e) => e.includes('CREATED_UNVERIFIED'))).toBe(true);
+  });
+
+  it('already-mapped rows are skipped on re-run (resumable, no duplicate create)', async () => {
+    const createUser = vi.fn().mockImplementation(async (p) => ({ id: 'user_prod_2', publicMetadata: p.publicMetadata }));
+    const clerk: ClerkLike = { users: { createUser } };
+    const rows = [
+      billingRow({ old_dev_user_id: 'user_dev_1', new_prod_user_id: 'user_prod_1', migration_status: 'CREATED_IN_PROD' }),
+      billingRow({ old_dev_user_id: 'user_dev_2', primary_email: 'b@example.com' }),
+    ];
+    const res = await runClerkImport(rows, { apply: true, prodCredentialsPresent: true, clerk });
+    expect(res.ok).toBe(true);
+    expect(createUser).toHaveBeenCalledTimes(1);             // only the unmapped row created
+    expect(res.mapped).toEqual([{ old_dev_user_id: 'user_dev_2', new_prod_user_id: 'user_prod_2' }]);
+  });
+
+  it('dry-run behavior unchanged: no cleanup_required, zero writes', async () => {
+    const clerk: ClerkLike = { users: { createUser: vi.fn() } };
+    const res = await runClerkImport([billingRow()], { prodCredentialsPresent: true, clerk });
+    expect(res.dryRun).toBe(true);
+    expect(res.created).toBe(0);
+    expect(res.cleanup_required).toEqual([]);
+    expect(res.stoppedEarly).toBe(false);
+    expect(clerk.users.createUser).not.toHaveBeenCalled();
+  });
+
+  it('normal successful import unchanged: mapped, no cleanup, ok', async () => {
+    const clerk: ClerkLike = { users: {
+      createUser: vi.fn().mockImplementation(async (p) => ({ id: 'user_prod_1', publicMetadata: p.publicMetadata })),
+    }};
+    const res = await runClerkImport([billingRow()], { apply: true, prodCredentialsPresent: true, clerk });
+    expect(res.ok).toBe(true);
+    expect(res.created).toBe(1);
+    expect(res.mapped).toEqual([{ old_dev_user_id: 'user_dev_1', new_prod_user_id: 'user_prod_1' }]);
+    expect(res.cleanup_required).toEqual([]);
+    expect(res.stoppedEarly).toBe(false);
+  });
+
   it('plan surfaces auth re-establishment (password reset / oauth reconnect)', () => {
     const plan = planClerkImport([
       billingRow({ old_dev_user_id: 'pw', password_enabled: true, external_accounts: [] }),
