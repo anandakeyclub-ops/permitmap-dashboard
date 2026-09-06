@@ -5,9 +5,23 @@ import { useAuth, useUser } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { startCheckout } from '../../../lib/start-checkout';
 import { track } from '../../../lib/analytics';
+import { checkoutOutcomeEvent } from '../../../lib/funnel-events';
 import {
   readIntent, buildAuthUrl, DASHBOARD_PATH,
 } from '../../../lib/checkout-intent';
+
+// Observability-only: emit the canonical checkout-funnel event for a startCheckout outcome
+// (stripe_checkout_created on success, checkout_creation_failed on failure) IN ADDITION to the
+// existing stripe_checkout_started / checkout_resume_failed. Best-effort; never alters flow.
+function emitOutcome(
+  getToken: ReturnType<typeof useAuth>['getToken'],
+  action: 'checkout' | 'signin' | 'active_subscription' | 'error',
+  plan: string,
+  source: string,
+) {
+  const d = checkoutOutcomeEvent(action);
+  if (d) track(getToken, d.event, { plan, source, properties: d.reason ? { reason: d.reason } : undefined });
+}
 
 // Controlled post-auth route that resumes a paid-plan checkout exactly once.
 //
@@ -50,8 +64,11 @@ function ResumeCheckout() {
 
     inFlight.current = true;
     setStatus('working');
+    // Real resume boundary: authenticated user with a valid paid plan is about to POST /api/checkout.
+    track(getToken, 'checkout_resume_started', { plan, source: 'checkout_resume' });
     startCheckout(plan, { attribution: params, currentPath: '/checkout/resume' })
       .then((res) => {
+        emitOutcome(getToken, res.action, plan, 'checkout_resume');   // stripe_checkout_created | checkout_creation_failed
         if (res.action === 'checkout') {
           track(getToken, 'stripe_checkout_started', { plan, source: 'checkout_resume' });
           // startCheckout has already navigated to the Stripe-hosted Checkout URL.
@@ -77,8 +94,10 @@ function ResumeCheckout() {
     const { plan, params } = readIntent(sp);
     if (!plan) { router.replace(DASHBOARD_PATH); return; }
     inFlight.current = true;
+    track(getToken, 'checkout_resume_started', { plan, source: 'checkout_resume_retry' });
     startCheckout(plan, { attribution: params, currentPath: '/checkout/resume' })
       .then((res) => {
+        emitOutcome(getToken, res.action, plan, 'checkout_resume_retry');
         if (res.action === 'checkout') { track(getToken, 'stripe_checkout_started', { plan, source: 'checkout_resume_retry' }); return; }
         if (res.action === 'signin') return;
         throw new Error('checkout did not return a url');

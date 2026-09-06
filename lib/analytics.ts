@@ -17,7 +17,14 @@ export type FunnelEvent =
   | 'upgrade_cta_click'
   | 'upgrade_modal_cta_click'
   | 'stripe_checkout_started'
-  | 'checkout_resume_failed';
+  | 'checkout_resume_failed'
+  // Signup → Stripe checkout observability funnel (see lib/funnel-events.ts). Additive; the
+  // events above are unchanged (historical reporting depends on them).
+  | 'signup_page_view'
+  | 'signup_completed'
+  | 'checkout_resume_started'
+  | 'stripe_checkout_created'
+  | 'checkout_creation_failed';
 
 // Lifecycle activation events (defined + built in lib/activationEvents; server allowlist mirrors
 // these). Kept as a separate union so the funnel taxonomy above is untouched.
