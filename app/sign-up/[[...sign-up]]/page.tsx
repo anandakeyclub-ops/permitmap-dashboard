@@ -2,6 +2,7 @@ import { SignUp } from '@clerk/nextjs';
 import {
   readIntent, buildResumeUrl, buildAuthUrl, DASHBOARD_PATH,
 } from '../../../lib/checkout-intent';
+import SignupFunnelTracker from '../../../components/analytics/SignupFunnelTracker';
 
 // Preserves a paid-plan checkout intent through Clerk sign-up.
 //
@@ -29,6 +30,7 @@ export default async function SignUpPage({
     : { fallbackRedirectUrl: DASHBOARD_PATH };
   const signInUrl = buildAuthUrl('/sign-in', plan, params);
   const county = typeof sp.county === 'string' ? sp.county : undefined;
+  const source = typeof sp.source === 'string' ? sp.source : undefined;
 
   return (
     <div style={{
@@ -38,6 +40,8 @@ export default async function SignUpPage({
       alignItems: 'center',
       justifyContent: 'center',
     }}>
+      {/* Observability only — renders nothing, never affects the Clerk flow. */}
+      <SignupFunnelTracker plan={plan || undefined} source={source} />
       <SignUp
         unsafeMetadata={county ? { county } : undefined}
         signInUrl={signInUrl}
