@@ -5,9 +5,18 @@ import { track } from '../lib/analytics';
 const flush = () => new Promise(r => setTimeout(r, 0));
 
 let realFetch: typeof globalThis.fetch;
+let realWindow: any;
 
-beforeEach(() => { realFetch = globalThis.fetch; });
-afterEach(() => { globalThis.fetch = realFetch; vi.restoreAllMocks(); });
+beforeEach(() => {
+  realFetch = globalThis.fetch;
+  realWindow = (globalThis as any).window;
+});
+afterEach(() => {
+  globalThis.fetch = realFetch;
+  if (realWindow === undefined) delete (globalThis as any).window;
+  else (globalThis as any).window = realWindow;
+  vi.restoreAllMocks();
+});
 
 describe('track() — fire-and-forget analytics', () => {
   it('POSTs event_name + props to /analytics/event with a bearer token', async () => {
@@ -27,6 +36,38 @@ describe('track() — fire-and-forget analytics', () => {
     expect(JSON.parse(init.body)).toEqual({
       event_name: 'saved_lead', county: 'miami-dade', properties: { permit_number: 'BLD-1', outcome: 'saved' },
     });
+  });
+
+  it('mirrors only checkout-funnel events to GA4 and excludes opaque ids/properties', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init: any) => ({ ok: true }) as any);
+    globalThis.fetch = fetchMock as any;
+    const gtag = vi.fn();
+    (globalThis as any).window = { gtag, dataLayer: [] };
+
+    track(undefined, 'stripe_checkout_created', {
+      plan: 'team', source: 'checkout_resume', county: 'marion',
+      client_reference_id: 'opaque-id', properties: { secretish: 'not-for-ga4' },
+    });
+    await flush();
+
+    expect(gtag).toHaveBeenCalledTimes(1);
+    expect(gtag).toHaveBeenCalledWith('event', 'stripe_checkout_created', {
+      plan: 'team', source: 'checkout_resume', county: 'marion',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1); // first-party path remains intact
+  });
+
+  it('does not mirror product activation events to GA4', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init: any) => ({ ok: true }) as any);
+    globalThis.fetch = fetchMock as any;
+    const gtag = vi.fn();
+    (globalThis as any).window = { gtag, dataLayer: [] };
+
+    track(undefined, 'saved_lead', { county: 'miami-dade' });
+    await flush();
+
+    expect(gtag).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('never throws and still posts when getToken throws (auth swallowed, no header)', async () => {
