@@ -1,6 +1,7 @@
 // First-party funnel analytics → permitmap-api POST /analytics/event (Supabase).
 // Fire-and-forget and NEVER throws — analytics must never affect the UI or checkout.
 // The API derives user_id/email/tier from the Clerk JWT; we only pass funnel context.
+// Selected commercial-funnel events are also mirrored to the public PermitMap GA4 property.
 
 import type { ActivationEvent } from './activationEvents';
 
@@ -38,7 +39,42 @@ export interface TrackProps {
   properties?: Record<string, unknown>;
 }
 
+// Keep GA4 narrowly scoped to the commercial checkout funnel. Product-activation events remain
+// first-party only so this bridge cannot inflate GA4 engagement or conversion reporting.
+const GA4_FUNNEL_EVENTS = new Set<AnalyticsEvent>([
+  'signup_page_view',
+  'signup_completed',
+  'checkout_resume_started',
+  'stripe_checkout_created',
+  'checkout_creation_failed',
+  'stripe_checkout_started',
+  'checkout_resume_failed',
+]);
+
+function mirrorToGa4(event: AnalyticsEvent, props: TrackProps): void {
+  if (typeof window === 'undefined' || !GA4_FUNNEL_EVENTS.has(event)) return;
+  try {
+    const w = window as typeof window & {
+      dataLayer?: unknown[];
+      gtag?: (...args: unknown[]) => void;
+    };
+    w.dataLayer = w.dataLayer || [];
+    // Queue safely even if the external gtag script has not finished loading yet.
+    w.gtag = w.gtag || function (...args: unknown[]) { w.dataLayer!.push(args); };
+    w.gtag('event', event, {
+      ...(props.plan ? { plan: props.plan } : {}),
+      ...(props.source ? { source: props.source } : {}),
+      ...(props.county ? { county: props.county } : {}),
+    });
+  } catch {
+    /* GA4 is best-effort; first-party analytics remains authoritative. */
+  }
+}
+
 export function track(getToken: GetToken | undefined, event: AnalyticsEvent, props: TrackProps = {}): void {
+  // Mirror synchronously before a navigation can unload the page. No PII or opaque IDs are sent.
+  mirrorToGa4(event, props);
+
   // Detached async; nothing awaits it, and every failure path is swallowed.
   void (async () => {
     try {
