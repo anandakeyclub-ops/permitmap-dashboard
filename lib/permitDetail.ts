@@ -71,3 +71,20 @@ export function formatPermitField(permit: Record<string, any>, field: PermitFiel
 export function isNotProvided(value: string): boolean {
   return value === NOT_PROVIDED;
 }
+
+// ── Date-basis awareness (PRC) ────────────────────────────────────────────────
+// The drawer's date row must reflect the county's date basis: an "issued" county shows
+// "Permit issued" from LAST_ISSUED_DATE; an "opened" county (e.g. Citrus) shows "Record
+// opened" from OPENED_DATE — never a blank issue date, never an opened date mislabeled as
+// issued. The API declares basis/label via coverage; the drawer just renders it.
+import { DATE_BASIS_FIELDS, DEFAULT_DATE_LABEL, normalizeBasis } from './dateBasis';
+
+/** PERMIT_DETAIL_FIELDS with the date row adapted to the county's basis/label. Omitted opts →
+ *  the static issued-basis list (back-compat with the Contractor Profile and existing tests). */
+export function permitDetailFields(opts?: { dateLabel?: string | null; dateBasis?: string | null }): PermitField[] {
+  const basis = normalizeBasis(opts?.dateBasis);
+  const label = (opts?.dateLabel && opts.dateLabel.trim()) ? opts.dateLabel.trim() : DEFAULT_DATE_LABEL[basis];
+  return PERMIT_DETAIL_FIELDS.map((f) =>
+    f.label === 'Issue Date' ? { label, keys: DATE_BASIS_FIELDS[basis], kind: 'date' as PermitFieldKind } : f,
+  );
+}

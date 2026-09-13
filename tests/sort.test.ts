@@ -30,6 +30,22 @@ describe('sortPermits — required options', () => {
   });
 });
 
+describe('sortPermits — opened-basis counties (PRC)', () => {
+  // Citrus-shaped rows carry OPENED_DATE (no issue date). Date sorting must still work: the sort's
+  // date keys union in the opened-basis fields, so newest/oldest order by OPENED_DATE.
+  const openedRows = () => [
+    { PERMITNO: 'O-1', OPENED_DATE: '2026-07-10' },
+    { PERMITNO: 'O-2', OPENED_DATE: '2026-07-27' },
+    { PERMITNO: 'O-3', OPENED_DATE: '2026-07-01' },
+  ];
+  it('newest first orders opened-basis rows by OPENED_DATE desc', () => {
+    expect(nos(sortPermits(openedRows(), 'newest'))).toEqual(['O-2', 'O-1', 'O-3']);
+  });
+  it('oldest first orders opened-basis rows by OPENED_DATE asc', () => {
+    expect(nos(sortPermits(openedRows(), 'oldest'))).toEqual(['O-3', 'O-1', 'O-2']);
+  });
+});
+
 describe('sortPermits — safety & determinism', () => {
   it('does not mutate the original input array', () => {
     const input = rows();

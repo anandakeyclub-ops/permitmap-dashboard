@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef } from 'react';
 import { X, Star } from 'lucide-react';
-import { PERMIT_DETAIL_FIELDS, formatPermitField, isNotProvided, NOT_PROVIDED } from '../../../lib/permitDetail';
+import { permitDetailFields, formatPermitField, isNotProvided, NOT_PROVIDED } from '../../../lib/permitDetail';
 import { getContractorName } from '../../../lib/contractorProfile';
 import { handleDialogTab } from '../../../lib/dialogFocus';
 
@@ -20,7 +20,7 @@ import { handleDialogTab } from '../../../lib/dialogFocus';
 // the button renders when `canSave` (paid tier) and is disabled once `saved` or `saving`.
 export default function PermitDrawer({
   permit, onClose, onOpenContractor, focusContractorOnMount,
-  canSave, saved, saving, saveError, onSaveLead,
+  canSave, saved, saving, saveError, onSaveLead, dateLabel, dateBasis,
 }: {
   permit: Record<string, any>;
   onClose: () => void;
@@ -31,7 +31,15 @@ export default function PermitDrawer({
   saving?: boolean;
   saveError?: boolean;
   onSaveLead?: () => void;
+  // API-declared date dimension for this county (coverage.date_basis/date_label). Omitted →
+  // the drawer's static issued-basis default ("Permit issued" / LAST_ISSUED_DATE).
+  dateLabel?: string | null;
+  dateBasis?: string | null;
 }) {
+  // The date row's label + source field follow the county's basis — an opened-basis county
+  // (Citrus) shows "Record opened" from OPENED_DATE, never a blank issue date. Everything else
+  // is unchanged. Recomputed per basis/label (cheap; the field list is tiny).
+  const detailFields = permitDetailFields({ dateLabel, dateBasis });
   const panelRef = useRef<HTMLDivElement>(null);
   const contractorBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -115,7 +123,7 @@ export default function PermitDrawer({
         )}
 
         <div className="pm-drawer-grid">
-          {PERMIT_DETAIL_FIELDS.map(f => {
+          {detailFields.map(f => {
             const value = formatPermitField(permit, f, NOT_PROVIDED);
             const notProvided = isNotProvided(value);
             const isContractor = f.label === 'Contractor';
