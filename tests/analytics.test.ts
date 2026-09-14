@@ -57,6 +57,22 @@ describe('track() — fire-and-forget analytics', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1); // first-party path remains intact
   });
 
+  it('queues pre-load funnel events in canonical gtag arguments shape', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init: any) => ({ ok: true }) as any);
+    globalThis.fetch = fetchMock as any;
+    (globalThis as any).window = { dataLayer: [] };
+
+    track(undefined, 'signup_page_view', { plan: 'pro', source: 'marketing' });
+    await flush();
+
+    const w = (globalThis as any).window;
+    expect(typeof w.gtag).toBe('function');
+    expect(w.dataLayer).toHaveLength(1);
+    expect(Array.from(w.dataLayer[0] as ArrayLike<unknown>)).toEqual([
+      'event', 'signup_page_view', { plan: 'pro', source: 'marketing' },
+    ]);
+  });
+
   it('does not mirror product activation events to GA4', async () => {
     const fetchMock = vi.fn(async (_url: string, _init: any) => ({ ok: true }) as any);
     globalThis.fetch = fetchMock as any;

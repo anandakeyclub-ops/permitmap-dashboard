@@ -59,8 +59,10 @@ function mirrorToGa4(event: AnalyticsEvent, props: TrackProps): void {
       gtag?: (...args: unknown[]) => void;
     };
     w.dataLayer = w.dataLayer || [];
-    // Queue safely even if the external gtag script has not finished loading yet.
-    w.gtag = w.gtag || function (...args: unknown[]) { w.dataLayer!.push(args); };
+    // Queue safely even if the external gtag script has not finished loading yet. Use the
+    // canonical gtag queue shape (the function's `arguments` object), not a rest-parameter array;
+    // Google's loader consumes the canonical shape when it drains dataLayer.
+    w.gtag = w.gtag || (function (..._args: unknown[]) { w.dataLayer!.push(arguments); } as typeof w.gtag);
     w.gtag('event', event, {
       ...(props.plan ? { plan: props.plan } : {}),
       ...(props.source ? { source: props.source } : {}),
