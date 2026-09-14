@@ -31,6 +31,9 @@ export default async function SignUpPage({
   const signInUrl = buildAuthUrl('/sign-in', plan, params);
   const county = typeof sp.county === 'string' ? sp.county : undefined;
   const source = typeof sp.source === 'string' ? sp.source : undefined;
+  // The marketing trial form already collected email. Reuse that value so Clerk does not
+  // make a high-intent visitor type the same address twice. Bound it before handing it to Clerk.
+  const email = typeof sp.email === 'string' && sp.email.length <= 320 ? sp.email : undefined;
 
   return (
     <div style={{
@@ -43,6 +46,7 @@ export default async function SignUpPage({
       {/* Observability only — renders nothing, never affects the Clerk flow. */}
       <SignupFunnelTracker plan={plan || undefined} source={source} />
       <SignUp
+        initialValues={email ? { emailAddress: email } : undefined}
         unsafeMetadata={county ? { county } : undefined}
         signInUrl={signInUrl}
         {...redirectProps}
