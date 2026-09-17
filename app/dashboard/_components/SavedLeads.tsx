@@ -79,8 +79,8 @@ export default function SavedLeads({ getToken, onBrowse }:
     return c;
   }, [leads]);
 
-  // Step 5: Won summary — derived from the full list, independent of the filter.
-  // Seed of Phase D ROI reporting: just a card, no separate page.
+  // Pipeline value summary — permit/project valuation, not contractor revenue.
+  // Never present this field as quoted/won revenue until the contractor explicitly enters revenue.
   const wins = useMemo(() => {
     const won = leads.filter(l => l.status === 'won');
     const value = won.reduce((s, l) => s + (l.value || 0), 0);
@@ -302,7 +302,7 @@ export default function SavedLeads({ getToken, onBrowse }:
           <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
             <div>
               <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase',
-                letterSpacing: '0.06em', fontWeight: 700 }}>Est. value</div>
+                letterSpacing: '0.06em', fontWeight: 700 }}>Tracked permit value</div>
               <div style={{ fontSize: 18, fontWeight: 700, color: '#22c55e' }}>{fmtVal(wins.value)}</div>
             </div>
             <div>
