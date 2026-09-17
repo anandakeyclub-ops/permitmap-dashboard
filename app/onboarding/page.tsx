@@ -19,6 +19,7 @@ export default function OnboardingPage() {
   const tier = (user?.publicMetadata?.tier as string) || 'preview';
   const limit = entitlementCountyLimit(tier);
   const allCounties = ALL_COUNTY_TIERS.has(tier);
+  const monthlyPrice: Record<string, number> = { starter: 79, pro: 149, team: 299 };
 
   const [counties, setCounties] = useState<CountyOpt[]>([]);
   const [selCounties, setSelCounties] = useState<string[]>([]);
@@ -77,10 +78,22 @@ export default function OnboardingPage() {
 
   return (
     <main style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}>
-      <h1>Finish setting up PermitMap</h1>
-      <p>Your <strong>{tier}</strong> plan includes{' '}
-        {allCounties ? 'all counties' : `up to ${limit} count${limit === 1 ? 'y' : 'ies'}`}.
-        Choose where and what you want permits for — you can change this later.</p>
+      <h1>Choose what PermitMap should deliver</h1>
+      <p>Your <strong style={{ textTransform: 'capitalize' }}>{tier}</strong> plan includes{' '}
+        {allCounties ? 'every supported county' : `up to ${limit} count${limit === 1 ? 'y' : 'ies'}`}.
+        Choose the markets and trades you actually work. You can change these later.</p>
+
+      <section aria-label="Subscription expectations" style={{
+        background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12,
+        padding: '16px 18px', margin: '20px 0', lineHeight: 1.55,
+      }}>
+        <strong>What happens next</strong>
+        <ol style={{ margin: '8px 0 0', paddingLeft: 20 }}>
+          <li>We configure your dashboard and ranked opportunity queue.</li>
+          <li>Your permit summary arrives by email each week; the dashboard holds the full workflow.</li>
+          <li>Your 14-day trial automatically converts to <strong>${monthlyPrice[tier]}/month</strong> unless you cancel before it ends.</li>
+        </ol>
+      </section>
 
       {!allCounties && (
         <section aria-labelledby="counties-h">
@@ -102,6 +115,7 @@ export default function OnboardingPage() {
 
       <section aria-labelledby="trades-h">
         <h2 id="trades-h">Trades</h2>
+        <p style={{ marginTop: -8, color: '#475569' }}>Select at least one so your dashboard and weekly delivery prioritize relevant work.</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {SUPPORTED_TRADES.map((t) => (
             <label key={t}>
@@ -118,7 +132,7 @@ export default function OnboardingPage() {
 
       <button onClick={submit} disabled={!canSubmit} aria-disabled={!canSubmit}
         style={{ marginTop: 16, padding: '10px 16px' }}>
-        {saving ? 'Saving…' : done ? 'Saved' : 'Save & continue'}
+        {saving ? 'Saving…' : done ? 'Saved' : 'Activate my permit delivery'}
       </button>
     </main>
   );

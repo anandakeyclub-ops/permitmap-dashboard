@@ -18,6 +18,7 @@ import { isCountyLocked, defaultEntitledCounty, upgradeMessageForCounty } from '
 import { migrateLegacySelectedCounties } from '../../lib/onboarding';
 import CallList from './_components/CallList';
 import DigestCard from './_components/DigestCard';
+import SubscriberValueCard from './_components/SubscriberValueCard';
 import UpgradeModal from './_components/UpgradeModal';
 import PermitDrawer from './_components/PermitDrawer';
 import DashboardLoadingSkeleton from './_components/DashboardLoadingSkeleton';
@@ -630,6 +631,20 @@ export default function Dashboard() {
                     Dismiss
                   </button>
                 </div>
+              )}
+
+              {/* Retention layer: make the recurring agreement explicit and guide every paid
+                  subscriber to the first actions that correlate with realized value. Read failures
+                  degrade silently; permit data and the existing dashboard remain untouched. */}
+              {!isPreview && (
+                <SubscriberValueCard
+                  getToken={getToken}
+                  tier={tier}
+                  savedLeadCount={savedLeadIds.size}
+                  onOpportunities={goToQueue}
+                  onPermits={() => setActiveTab('permits')}
+                  onSaved={() => setActiveTab('saved')}
+                />
               )}
 
               {/* Phase B: Weekly Digest Card — 60-second briefing, above the Opportunity Queue.

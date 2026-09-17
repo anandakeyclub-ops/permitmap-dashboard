@@ -8,16 +8,16 @@ export default function Pricing() {
       name: 'Starter',
       price: '$79',
       period: '/month',
-      description: 'Perfect for contractors focused on one market',
+      description: 'One focused market with a ranked weekly call list',
       features: [
         '1 county',
         'Top 50 permits/week (highest scored)',
         'Opportunity scoring',
         'Trade breakdown',
         'Smart targeting',
-        'Weekly insights',
+        'Weekly permit email + live dashboard',
       ],
-      cta: 'Get Started',
+      cta: 'Start 14-Day Free Trial',
       plan: 'starter' as const,
       highlight: false,
     },
@@ -25,16 +25,16 @@ export default function Pricing() {
       name: 'Pro',
       price: '$149',
       period: '/month',
-      description: 'For contractors expanding across multiple counties',
+      description: 'Multi-market coverage with full lead workflow',
       features: [
         'Up to 5 counties',
         'Unlimited permits',
         'Full opportunity scoring',
         'ZIP code heat maps',
         'Advanced trend analysis',
-        'Priority support',
+        'Weekly permit email + live dashboard',
       ],
-      cta: 'Go Pro',
+      cta: 'Start 14-Day Free Trial',
       plan: 'pro' as const,
       highlight: true,
     },
@@ -42,16 +42,16 @@ export default function Pricing() {
       name: 'Team',
       price: '$299',
       period: '/month',
-      description: 'For large contractors and multi-market operations',
+      description: 'Company-wide coverage and a shared permit pipeline',
       features: [
-        'All Florida counties',
+        'Every supported county',
         'Unlimited permits/week',
         'Full intelligence dashboard',
         'API data access',
         'Up to 3 team members',
-        'Priority support',
+        'Weekly Team report every Monday',
       ],
-      cta: 'Start Team Plan',
+      cta: 'Start 14-Day Free Trial',
       plan: 'team' as const,
       highlight: false,
     },
@@ -72,7 +72,7 @@ export default function Pricing() {
             Simple, transparent pricing
           </h1>
           <p style={{ fontSize: 16, color: '#64748b', margin: 0 }}>
-            Real permit intelligence. No contracts. Cancel anytime.
+            14 days free with a card on file. Then billed monthly. Cancel anytime.
           </p>
         </div>
 
@@ -119,6 +119,9 @@ export default function Pricing() {
                 ))}
               </ul>
 
+              <p style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5, minHeight: 36, margin: '0 0 14px' }}>
+                Today: $0 · After 14 days: {tier.price}/month unless canceled
+              </p>
               <button onClick={() => startCheckout(tier.plan)} style={{
                 display: 'block', width: '100%', textAlign: 'center',
                 padding: '12px 24px', borderRadius: 8,
