@@ -6,9 +6,9 @@
 // (saved_leads.status) exactly.
 export type SavedLeadStatus = 'saved' | 'called' | 'quoted' | 'won' | 'lost';
 
-// A saved lead as returned by permitmap-api's /saved-leads endpoints — all 13
-// columns of the saved_leads table, in the API's JSON-serialised shape
-// (value -> number, dates/timestamps -> ISO strings).
+// A saved lead as returned by permitmap-api's /saved-leads endpoints — persisted
+// saved_leads fields in the API's JSON-serialised shape
+// (money fields -> numbers, dates/timestamps -> ISO strings).
 export interface SavedLead {
   id: string;
   contractor_id: string;
@@ -17,6 +17,8 @@ export interface SavedLead {
   address: string;
   trade: string | null;
   value: number | null;
+  quoted_amount: number | null; // contractor-entered; never inferred from permit value
+  won_amount: number | null;    // contractor-entered realized revenue
   permit_date: string | null;   // ISO date, e.g. "2026-05-28"
   score: number | null;
   status: SavedLeadStatus;

@@ -49,6 +49,7 @@ export default function SavedLeads({ getToken, onBrowse }:
   const [pending, setPending]     = useState<Set<string>>(new Set());
   const [toast, setToast]         = useState<{ id: number; msg: string } | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null); // inline delete confirmation
+  const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
 
   // One fetch on open — never per-row.
   useEffect(() => {
@@ -79,32 +80,57 @@ export default function SavedLeads({ getToken, onBrowse }:
     return c;
   }, [leads]);
 
-  // Pipeline value summary — permit/project valuation, not contractor revenue.
-  // Never present this field as quoted/won revenue until the contractor explicitly enters revenue.
+  // Pipeline value summary. Permit valuation stays separate from contractor-entered quote/won dollars.
   const wins = useMemo(() => {
     const won = leads.filter(l => l.status === 'won');
     const value = won.reduce((s, l) => s + (l.value || 0), 0);
+    const wonRevenue = won.reduce((s, l) => s + (l.won_amount || 0), 0);
+    const quotedPipeline = leads.filter(l => l.status === 'quoted')
+      .reduce((s, l) => s + (l.quoted_amount || 0), 0);
+    const worked = leads.filter(l => ['called', 'quoted', 'won'].includes(l.status)).length;
     const scored = won.filter(l => l.score != null);
     const avgScore = scored.length
       ? Math.round(scored.reduce((s, l) => s + (l.score as number), 0) / scored.length)
       : null;
-    return { count: won.length, value, avgScore };
+    return { count: won.length, value, wonRevenue, quotedPipeline, worked, avgScore };
   }, [leads]);
 
   const visible = filter === 'all' ? leads : leads.filter(l => l.status === filter);
 
   const changeStatus = async (lead: SavedLead, next: SavedLeadStatus) => {
     if (next === lead.status || pending.has(lead.id)) return;
-    const prev = lead.status;
+    const prevLead = lead;
     setPending(p => new Set(p).add(lead.id));
     setLeads(ls => ls.map(l => l.id === lead.id ? { ...l, status: next } : l));   // optimistic
     try {
-      await updateSavedLead(getToken, lead.id, next);
+      const result = await updateSavedLead(getToken, lead.id, next);
+      setLeads(ls => ls.map(l => l.id === lead.id ? result.lead : l));
     } catch {
-      setLeads(ls => ls.map(l => l.id === lead.id ? { ...l, status: prev } : l)); // revert
+      setLeads(ls => ls.map(l => l.id === lead.id ? prevLead : l)); // revert full row
       notify('Failed to update status — try again');
     } finally {
       setPending(p => { const n = new Set(p); n.delete(lead.id); return n; });
+    }
+  };
+
+  const saveAmount = async (lead: SavedLead, field: 'quoted_amount' | 'won_amount', raw: string) => {
+    const draftKey = `${lead.id}:${field}`;
+    const cleaned = raw.replace(/[$,]/g, '').trim();
+    const amount = cleaned === '' ? null : Number(cleaned);
+    if (amount !== null && (!Number.isFinite(amount) || amount < 0)) {
+      setAmountDrafts(d => ({ ...d, [draftKey]: lead[field] == null ? '' : String(lead[field]) }));
+      notify('Enter a valid non-negative dollar amount'); return;
+    }
+    const prevLead = lead;
+    setLeads(ls => ls.map(l => l.id === lead.id ? { ...l, [field]: amount } : l));
+    try {
+      const result = await updateSavedLead(getToken, lead.id, undefined, undefined, { [field]: amount });
+      setLeads(ls => ls.map(l => l.id === lead.id ? result.lead : l));
+      setAmountDrafts(d => { const n = { ...d }; delete n[draftKey]; return n; });
+    } catch {
+      setLeads(ls => ls.map(l => l.id === lead.id ? prevLead : l));
+      setAmountDrafts(d => ({ ...d, [draftKey]: prevLead[field] == null ? '' : String(prevLead[field]) }));
+      notify('Failed to save pipeline value — try again');
     }
   };
 
@@ -209,10 +235,10 @@ export default function SavedLeads({ getToken, onBrowse }:
       </div>
 
       <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 920 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #1e293b' }}>
-              {['Address', 'Trade', 'Value', 'Permit Date', 'Score', 'Status', ''].map(h => (
+              {['Address', 'Trade', 'Permit Value', 'Quote / Won $', 'Permit Date', 'Score', 'Status', ''].map(h => (
                 <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 11,
                   color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
               ))}
@@ -231,8 +257,23 @@ export default function SavedLeads({ getToken, onBrowse }:
                   </td>
                   <td style={{ padding: '12px 16px', fontSize: 12, color: '#94a3b8',
                     textTransform: 'capitalize' }}>{(l.trade || '—').replace('_', ' ')}</td>
-                  <td style={{ padding: '12px 16px', fontSize: 13, color: '#22c55e', fontWeight: 600 }}>
+                  <td style={{ padding: '12px 16px', fontSize: 13, color: '#94a3b8', fontWeight: 600 }}>
                     {fmtVal(l.value)}</td>
+                  <td style={{ padding: '12px 16px', minWidth: 155 }}>
+                    {(l.status === 'quoted' || l.status === 'won') ? (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#64748b' }}>
+                        {l.status === 'won' ? 'Won' : 'Quote'} $
+                        <input type="number" min="0" step="1"
+                          value={amountDrafts[`${l.id}:${l.status === 'won' ? 'won_amount' : 'quoted_amount'}`]
+                            ?? String((l.status === 'won' ? l.won_amount : l.quoted_amount) ?? '')}
+                          onChange={e => setAmountDrafts(d => ({ ...d,
+                            [`${l.id}:${l.status === 'won' ? 'won_amount' : 'quoted_amount'}`]: e.target.value }))}
+                          onBlur={e => saveAmount(l, l.status === 'won' ? 'won_amount' : 'quoted_amount', e.target.value)}
+                          style={{ width: 88, background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155',
+                            borderRadius: 5, padding: '4px 6px', fontSize: 12 }} />
+                      </label>
+                    ) : <span style={{ color: '#334155' }}>—</span>}
+                  </td>
                   <td style={{ padding: '12px 16px', fontSize: 12, color: '#64748b' }}>{fmtDate(l.permit_date)}</td>
                   <td style={{ padding: '12px 16px', fontSize: 13, color: '#94a3b8' }}>{l.score ?? '—'}</td>
                   <td style={{ padding: '12px 16px' }}>
@@ -288,7 +329,20 @@ export default function SavedLeads({ getToken, onBrowse }:
         )}
       </div>
 
-      {/* Step 5: Won leads summary (shown only when there is at least one win) */}
+      {/* Contractor-entered ROI: permit value remains separate and is never presented as revenue. */}
+      {(wins.worked > 0 || wins.quotedPipeline > 0 || wins.wonRevenue > 0) && (
+        <div style={{ marginTop: 18, background: '#111827', border: '1px solid #2563eb50', borderRadius: 12, padding: '18px 22px' }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', marginBottom: 12 }}>Your PermitMap Pipeline</div>
+          <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
+            <div><div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Worked now</div><strong>{wins.worked}</strong></div>
+            <div><div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Quoted now</div><strong>{counts.quoted}</strong></div>
+            <div><div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Won now</div><strong>{wins.count}</strong></div>
+            <div><div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Quoted pipeline</div><strong>{fmtVal(wins.quotedPipeline)}</strong></div>
+            <div><div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Won revenue</div><strong>{fmtVal(wins.wonRevenue)}</strong></div>
+          </div>
+        </div>
+      )}
+
       {wins.count > 0 && (
         <div style={{ marginTop: 18,
           background: 'linear-gradient(135deg, #14532d20, #0f172a)',
