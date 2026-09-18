@@ -29,7 +29,7 @@ import { buildContractorProfile } from '../../lib/contractorProfile';
 import { track } from '../../lib/analytics';
 import {
   shouldEmitDashboardView, dashboardViewedEvent, permitDrawerOpenEvent,
-  contractorProfileViewEvent, csvExportEvent, savedLeadEvent,
+  contractorProfileViewEvent, csvExportEvent, savedLeadEvent, permitSearchEvent,
 } from '../../lib/activationEvents';
 import { startCheckout } from '../../lib/start-checkout';
 import SavedLeads from './_components/SavedLeads';
@@ -308,8 +308,11 @@ export default function Dashboard() {
       .then(r => r.json())
       .then(p => {
         if (!latestPermits.current.isCurrent(requestId)) return; // a newer search superseded this one
-        setPermits(p.permits || []);
+        const rows = p.permits || [];
+        setPermits(rows);
         setPermitsLoading(false);
+        const searchEvent = permitSearchEvent(committedQuery, county, rows.length);
+        if (searchEvent) track(getToken, searchEvent.event, searchEvent.props);
       })
       .catch(err => {
         if (err?.name === 'AbortError' || !latestPermits.current.isCurrent(requestId)) return; // ignore aborts/stale
