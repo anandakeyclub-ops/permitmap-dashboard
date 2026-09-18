@@ -120,16 +120,19 @@ export async function checkSavedLead(
   return res.json();
 }
 
-// PATCH /saved-leads/:id — update status and/or notes.
+// PATCH /saved-leads/:id — update pipeline fields. Dollar values are contractor-entered only.
 export async function updateSavedLead(
   getToken: GetToken,
   id: string,
   status?: SavedLeadStatus,
   notes?: string,
+  amounts?: { quoted_amount?: number | null; won_amount?: number | null },
 ): Promise<{ lead: SavedLead }> {
-  const body: { status?: SavedLeadStatus; notes?: string } = {};
+  const body: { status?: SavedLeadStatus; notes?: string; quoted_amount?: number | null; won_amount?: number | null } = {};
   if (status !== undefined) body.status = status;
   if (notes !== undefined) body.notes = notes;
+  if (amounts && 'quoted_amount' in amounts) body.quoted_amount = amounts.quoted_amount;
+  if (amounts && 'won_amount' in amounts) body.won_amount = amounts.won_amount;
   const res = await apiFetch(`/saved-leads/${encodeURIComponent(id)}`, getToken, {
     method: 'PATCH', body,
   });
