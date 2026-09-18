@@ -14,6 +14,7 @@ import { saveLeadPermitId } from './saveLeadState';
 
 export const ACTIVATION_EVENTS = [
   'dashboard_viewed',
+  'permit_search',
   'permit_drawer_open',
   'contractor_profile_view',
   'csv_export',
@@ -98,4 +99,12 @@ export function savedLeadEvent(res: SaveResult, permit: Record<string, any>): Ac
       },
     },
   };
+}
+
+/** permit_search: emit only for a committed non-empty query. The dashboard calls this from the
+ * committed-query effect, not on keystrokes, so one user search produces one activation signal. */
+export function permitSearchEvent(query: string, county: string, resultCount: number): ActivationEmit | null {
+  const q = query.trim();
+  if (!q) return null;
+  return { event: 'permit_search', props: { county, properties: { query: q, result_count: Math.max(0, resultCount) } } };
 }

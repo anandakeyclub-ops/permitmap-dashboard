@@ -133,3 +133,11 @@ describe('privacy — no sensitive fields in any activation payload', () => {
     }
   });
 });
+
+describe('permitSearchEvent', () => {
+  it('emits only a committed non-empty query', async () => {
+    const { permitSearchEvent } = await import('../lib/activationEvents');
+    expect(permitSearchEvent('  roof  ', 'palm_beach', 7)).toEqual({ event: 'permit_search', props: { county: 'palm_beach', properties: { query: 'roof', result_count: 7 } } });
+    expect(permitSearchEvent('   ', 'palm_beach', 7)).toBeNull();
+  });
+});
