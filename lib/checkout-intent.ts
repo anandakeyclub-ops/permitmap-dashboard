@@ -23,6 +23,7 @@ export const DASHBOARD_PATH = '/dashboard';
 export const INTENT_FIELDS = [
   'county', 'trade', 'state', 'campaign', 'source', 'name', 'email',
   'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
+  'content_id',
   'ref', 'gclid', 'fbclid',
   // conversion-attribution transport: the first-party page the checkout CTA fired on. Carried to
   // Stripe metadata for permit_bot to resolve to a canonical asset (checkout-touch). Sanitized on
@@ -35,6 +36,7 @@ export const INTENT_FIELDS = [
 export const METADATA_FIELDS = [
   'county', 'trade', 'state', 'campaign', 'source',
   'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
+  'content_id',
   'ref', 'gclid', 'fbclid',
   'source_path',
 ] as const;
