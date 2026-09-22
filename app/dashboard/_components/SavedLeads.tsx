@@ -50,6 +50,7 @@ export default function SavedLeads({ getToken, onBrowse }:
   const [toast, setToast]         = useState<{ id: number; msg: string } | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null); // inline delete confirmation
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
 
   // One fetch on open — never per-row.
   useEffect(() => {
@@ -131,6 +132,22 @@ export default function SavedLeads({ getToken, onBrowse }:
       setLeads(ls => ls.map(l => l.id === lead.id ? prevLead : l));
       setAmountDrafts(d => ({ ...d, [draftKey]: prevLead[field] == null ? '' : String(prevLead[field]) }));
       notify('Failed to save pipeline value — try again');
+    }
+  };
+
+  const saveNotes = async (lead: SavedLead, raw: string) => {
+    const notes = raw.trim().slice(0, 2000);
+    if (notes === (lead.notes || '')) { setNoteDrafts(d => { const n={...d}; delete n[lead.id]; return n; }); return; }
+    const prevLead = lead;
+    setLeads(ls => ls.map(l => l.id === lead.id ? { ...l, notes: notes || null } : l));
+    try {
+      const result = await updateSavedLead(getToken, lead.id, undefined, notes);
+      setLeads(ls => ls.map(l => l.id === lead.id ? result.lead : l));
+      setNoteDrafts(d => { const n={...d}; delete n[lead.id]; return n; });
+    } catch {
+      setLeads(ls => ls.map(l => l.id === lead.id ? prevLead : l));
+      setNoteDrafts(d => ({ ...d, [lead.id]: prevLead.notes || '' }));
+      notify('Failed to save notes — try again');
     }
   };
 
@@ -238,7 +255,7 @@ export default function SavedLeads({ getToken, onBrowse }:
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 920 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #1e293b' }}>
-              {['Address', 'Trade', 'Permit Value', 'Quote / Won $', 'Permit Date', 'Score', 'Status', ''].map(h => (
+              {['Address', 'Trade', 'Permit Value', 'Quote / Won $', 'Permit Date', 'Score', 'Status', 'Notes', ''].map(h => (
                 <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 11,
                   color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
               ))}
@@ -291,6 +308,17 @@ export default function SavedLeads({ getToken, onBrowse }:
                       }}>
                       {STATUSES.map(s => <option key={s} value={s} style={{ background: '#0d1529', color: '#e2e8f0' }}>{s}</option>)}
                     </select>
+                  </td>
+                  <td style={{ padding: '12px 16px', minWidth: 190 }}>
+                    <input
+                      value={noteDrafts[l.id] ?? l.notes ?? ''}
+                      maxLength={2000}
+                      placeholder="Call notes / next step"
+                      aria-label={`Notes for ${l.address || l.county}`}
+                      onChange={e => setNoteDrafts(d => ({ ...d, [l.id]: e.target.value }))}
+                      onBlur={e => saveNotes(l, e.target.value)}
+                      style={{ width: '100%', minWidth: 160, boxSizing: 'border-box', background: '#0f172a',
+                        color: '#e2e8f0', border: '1px solid #334155', borderRadius: 5, padding: '5px 7px', fontSize: 12 }} />
                   </td>
                   <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                     {confirmingId === l.id ? (

@@ -137,7 +137,7 @@ describe('source_path: regression + security', () => {
   it('a client-supplied asset_id in the query is NOT forwarded (allowlist)', () => {
     const { params } = readIntent(new URLSearchParams('plan=team&asset_id=county:FORGED&content_id=x&source_path=/x/y'));
     expect((params as any).asset_id).toBeUndefined();
-    expect((params as any).content_id).toBeUndefined();
+    expect((params as any).content_id).toBe('x'); // content_id is intentionally allowlisted attribution metadata
     expect(params.source_path).toBe('/x/y');
   });
 });

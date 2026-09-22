@@ -13,7 +13,7 @@ const LANDING_QS =
   'plan=team&county=palm-beach&trade=roofing&state=fl&source=pricing&campaign=spring' +
   '&name=Jane%20Doe&email=jane%40x.com' +
   '&utm_source=google&utm_medium=cpc&utm_campaign=fl-roofers&utm_content=ad1&utm_term=roof' +
-  '&ref=partner7&gclid=GCLID123&fbclid=FBCLID456' +
+  '&content_id=county-harris-roofing&ref=partner7&gclid=GCLID123&fbclid=FBCLID456' +
   '&source_path=%2Ftexas%2Fharris-county';
 
 function fakeStripeCheckout() {
