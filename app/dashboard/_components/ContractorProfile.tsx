@@ -75,6 +75,11 @@ export default function ContractorProfile({
           </button>
         </div>
 
+        <div style={{ marginBottom: 16, padding: '10px 12px', background: '#17255455', border: '1px solid #3b82f644', borderRadius: 8,
+          fontSize: 12, lineHeight: 1.5, color: '#bfdbfe' }}>
+          <strong>Local activity context:</strong> this profile summarizes only permits currently loaded for {data.county || 'this county'}. Use it to understand recent contractor activity, not as a complete company history.
+        </div>
+
         {/* Aggregate summary */}
         <div className="pm-contractor-grid" style={{ marginBottom: 20 }}>
           {label('Contractor')}      {value(data.displayName)}
