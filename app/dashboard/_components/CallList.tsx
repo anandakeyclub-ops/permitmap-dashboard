@@ -186,10 +186,16 @@ export default function CallList({ scored, topZips, getToken }:
           Best Opportunities This Week
         </h2>
       </div>
-      <p style={{ margin: '0 0 20px', fontSize: 13, color: '#64748b' }}>
+      <p style={{ margin: '0 0 10px', fontSize: 13, color: '#64748b' }}>
         {list.length} scored {list.length === 1 ? 'opportunity' : 'opportunities'}, ranked by priority —
         start at the top.
       </p>
+      {savedIds.size === 0 && list.length > 0 && (
+        <div style={{ marginBottom: 18, padding: '10px 14px', borderRadius: 10,
+          background: '#14532d18', border: '1px solid #22c55e44', color: '#bbf7d0', fontSize: 13 }}>
+          <strong>First win:</strong> save one lead worth pursuing. Your saved list becomes your working call list, so you can return tomorrow without starting over.
+        </div>
+      )}
 
       {/* Trade filter */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
