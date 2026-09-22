@@ -19,6 +19,7 @@ import { migrateLegacySelectedCounties } from '../../lib/onboarding';
 import CallList from './_components/CallList';
 import DigestCard from './_components/DigestCard';
 import SubscriberValueCard from './_components/SubscriberValueCard';
+import TodayCommandCenter from './_components/TodayCommandCenter';
 import UpgradeModal from './_components/UpgradeModal';
 import PermitDrawer from './_components/PermitDrawer';
 import DashboardLoadingSkeleton from './_components/DashboardLoadingSkeleton';
@@ -648,6 +649,11 @@ export default function Dashboard() {
                   onPermits={() => setActiveTab('permits')}
                   onSaved={() => setActiveTab('saved')}
                 />
+              )}
+
+              {!isPreview && (
+                <TodayCommandCenter getToken={getToken} scoredCount={scored.length}
+                  onOpportunities={goToQueue} onSaved={() => setActiveTab('saved')} />
               )}
 
               {/* Phase B: Weekly Digest Card — 60-second briefing, above the Opportunity Queue.
