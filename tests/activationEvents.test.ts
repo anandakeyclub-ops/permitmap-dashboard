@@ -32,14 +32,14 @@ function allKeys(obj: unknown, acc: string[] = []): string[] {
 const BANNED = ['owner', 'address', 'email', 'token', 'secret', 'authorization', 'bearer'];
 
 describe('ACTIVATION_EVENTS taxonomy', () => {
-  it('is exactly the five ratified raw signals', () => {
+  it('is exactly the six ratified raw signals', () => {
     expect([...ACTIVATION_EVENTS]).toEqual([
-      'dashboard_viewed', 'permit_drawer_open', 'contractor_profile_view', 'csv_export', 'saved_lead',
+      'dashboard_viewed', 'permit_search', 'permit_drawer_open', 'contractor_profile_view', 'csv_export', 'saved_lead',
     ]);
   });
 
-  it('does NOT include permit_search (deferred) or any derived signal', () => {
-    for (const absent of ['permit_search', 'first_search', 'last_active', 'returned_next_day']) {
+  it('does NOT include derived lifecycle signals', () => {
+    for (const absent of ['first_search', 'last_active', 'returned_next_day']) {
       expect(ACTIVATION_EVENTS as readonly string[]).not.toContain(absent);
     }
   });
@@ -48,8 +48,8 @@ describe('ACTIVATION_EVENTS taxonomy', () => {
     // Compile-time proof: each name is assignable to ActivationEvent AND AnalyticsEvent.
     const asActivation: ActivationEvent[] = [...ACTIVATION_EVENTS];
     const asAnalytics: AnalyticsEvent[] = [...ACTIVATION_EVENTS];
-    expect(asActivation.length).toBe(5);
-    expect(asAnalytics.length).toBe(5);
+    expect(asActivation.length).toBe(6);
+    expect(asAnalytics.length).toBe(6);
   });
 });
 
