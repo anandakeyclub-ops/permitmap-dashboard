@@ -23,6 +23,7 @@ export interface SavedLead {
   score: number | null;
   status: SavedLeadStatus;
   notes: string | null;
+  follow_up_at?: string | null; // contractor-entered next-action timestamp; optional during rolling API deploy
   saved_at: string;             // ISO timestamp
   updated_at: string;           // ISO timestamp
 }
