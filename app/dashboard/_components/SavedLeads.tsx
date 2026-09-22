@@ -234,6 +234,13 @@ export default function SavedLeads({ getToken, onBrowse }:
 
   return (
     <div>
+      <style>{`
+        .pm-saved-mobile { display: none; }
+        @media (max-width: 720px) {
+          .pm-saved-table { display: none; }
+          .pm-saved-mobile { display: flex; flex-direction: column; gap: 10px; }
+        }
+      `}</style>
       <h2 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 700, color: '#f1f5f9', letterSpacing: '-0.02em' }}>
         Saved Leads
       </h2>
@@ -251,7 +258,7 @@ export default function SavedLeads({ getToken, onBrowse }:
         ))}
       </div>
 
-      <div style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, overflowX: 'auto' }}>
+      <div className="pm-saved-table" style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 920 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #1e293b' }}>
@@ -355,6 +362,38 @@ export default function SavedLeads({ getToken, onBrowse }:
             No leads with status “{filter}”.
           </div>
         )}
+      </div>
+
+      <div className="pm-saved-mobile">
+        {visible.map(l => (
+          <div key={l.id} style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 10, padding: 14 }}>
+            <div style={{ fontSize: 14, color: '#e2e8f0', fontWeight: 700, marginBottom: 3 }}>{l.address || 'Address unavailable'}</div>
+            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 10, textTransform: 'capitalize' }}>
+              {l.county} · {(l.trade || 'trade unavailable').replace('_', ' ')} · {fmtDate(l.permit_date)}
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+              <select value={l.status} disabled={pending.has(l.id)} onChange={e => changeStatus(l, e.target.value as SavedLeadStatus)}
+                aria-label="Change status" style={{ flex: 1, background: '#0f172a', color: STATUS_COLOR[l.status], border: '1px solid #334155', borderRadius: 6, padding: '7px 8px' }}>
+                {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <span style={{ fontSize: 12, color: '#94a3b8' }}>Score {l.score ?? '—'}</span>
+            </div>
+            {(l.status === 'quoted' || l.status === 'won') && (
+              <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 10 }}>
+                {l.status === 'won' ? 'Won revenue' : 'Quote'} $
+                <input type="number" min="0" step="1"
+                  value={amountDrafts[`${l.id}:${l.status === 'won' ? 'won_amount' : 'quoted_amount'}`] ?? String((l.status === 'won' ? l.won_amount : l.quoted_amount) ?? '')}
+                  onChange={e => setAmountDrafts(d => ({ ...d, [`${l.id}:${l.status === 'won' ? 'won_amount' : 'quoted_amount'}`]: e.target.value }))}
+                  onBlur={e => saveAmount(l, l.status === 'won' ? 'won_amount' : 'quoted_amount', e.target.value)}
+                  style={{ marginLeft: 5, width: 110, background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 5, padding: '5px 7px' }} />
+              </label>
+            )}
+            <textarea value={noteDrafts[l.id] ?? l.notes ?? ''} maxLength={2000} rows={2}
+              placeholder="Call notes / next step" aria-label={`Notes for ${l.address || l.county}`}
+              onChange={e => setNoteDrafts(d => ({ ...d, [l.id]: e.target.value }))} onBlur={e => saveNotes(l, e.target.value)}
+              style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: 8, fontSize: 12 }} />
+          </div>
+        ))}
       </div>
 
       {/* Contractor-entered ROI: permit value remains separate and is never presented as revenue. */}
