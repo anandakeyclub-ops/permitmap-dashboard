@@ -51,6 +51,7 @@ export default function SavedLeads({ getToken, onBrowse }:
   const [confirmingId, setConfirmingId] = useState<string | null>(null); // inline delete confirmation
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [followUpDrafts, setFollowUpDrafts] = useState<Record<string, string>>({});
 
   // One fetch on open — never per-row.
   useEffect(() => {
@@ -148,6 +149,28 @@ export default function SavedLeads({ getToken, onBrowse }:
       setLeads(ls => ls.map(l => l.id === lead.id ? prevLead : l));
       setNoteDrafts(d => ({ ...d, [lead.id]: prevLead.notes || '' }));
       notify('Failed to save notes — try again');
+    }
+  };
+
+  const followUpDate = (lead: SavedLead) => followUpDrafts[lead.id] ?? (lead.follow_up_at ? lead.follow_up_at.slice(0, 10) : '');
+  const followUpState = (lead: SavedLead) => {
+    const v = followUpDate(lead); if (!v) return '';
+    const today = new Date(); today.setHours(0,0,0,0); const d = new Date(`${v}T00:00:00`);
+    if (d.getTime() < today.getTime()) return 'Overdue';
+    if (d.getTime() === today.getTime()) return 'Due today';
+    return '';
+  };
+  const saveFollowUp = async (lead: SavedLead, raw: string) => {
+    const iso = raw ? new Date(`${raw}T12:00:00`).toISOString() : null;
+    const prevLead = lead;
+    setLeads(ls => ls.map(l => l.id === lead.id ? { ...l, follow_up_at: iso } : l));
+    try {
+      const result = await updateSavedLead(getToken, lead.id, undefined, undefined, undefined, iso);
+      setLeads(ls => ls.map(l => l.id === lead.id ? result.lead : l));
+      setFollowUpDrafts(d => { const n={...d}; delete n[lead.id]; return n; });
+    } catch {
+      setLeads(ls => ls.map(l => l.id === lead.id ? prevLead : l));
+      notify('Failed to schedule follow-up — try again');
     }
   };
 
@@ -262,7 +285,7 @@ export default function SavedLeads({ getToken, onBrowse }:
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 920 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #1e293b' }}>
-              {['Address', 'Trade', 'Permit Value', 'Quote / Won $', 'Permit Date', 'Score', 'Status', 'Notes', ''].map(h => (
+              {['Address', 'Trade', 'Permit Value', 'Quote / Won $', 'Permit Date', 'Score', 'Status', 'Follow up', 'Notes', ''].map(h => (
                 <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 11,
                   color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
               ))}
@@ -315,6 +338,12 @@ export default function SavedLeads({ getToken, onBrowse }:
                       }}>
                       {STATUSES.map(s => <option key={s} value={s} style={{ background: '#0d1529', color: '#e2e8f0' }}>{s}</option>)}
                     </select>
+                  </td>
+                  <td style={{ padding: '12px 16px', minWidth: 145 }}>
+                    <input type="date" value={followUpDate(l)} aria-label={`Follow up for ${l.address || l.county}`}
+                      onChange={e => { setFollowUpDrafts(d => ({...d,[l.id]:e.target.value})); saveFollowUp(l,e.target.value); }}
+                      style={{ background:'#0f172a',color:'#e2e8f0',border:'1px solid #334155',borderRadius:5,padding:'5px 6px',fontSize:12 }} />
+                    {followUpState(l) && <div style={{ marginTop:4,fontSize:10,fontWeight:700,color:followUpState(l)==='Overdue'?'#f87171':'#facc15' }}>{followUpState(l)}</div>}
                   </td>
                   <td style={{ padding: '12px 16px', minWidth: 190 }}>
                     <input
@@ -388,6 +417,12 @@ export default function SavedLeads({ getToken, onBrowse }:
                   style={{ marginLeft: 5, width: 110, background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 5, padding: '5px 7px' }} />
               </label>
             )}
+            <label style={{ display:'block',fontSize:11,color:'#64748b',marginBottom:10 }}>Follow up
+              <input type="date" value={followUpDate(l)} aria-label={`Follow up for ${l.address || l.county}`}
+                onChange={e => { setFollowUpDrafts(d=>({...d,[l.id]:e.target.value})); saveFollowUp(l,e.target.value); }}
+                style={{ display:'block',marginTop:4,width:'100%',boxSizing:'border-box',background:'#0f172a',color:'#e2e8f0',border:'1px solid #334155',borderRadius:6,padding:7 }} />
+              {followUpState(l) && <strong style={{ display:'block',marginTop:4,color:followUpState(l)==='Overdue'?'#f87171':'#facc15' }}>{followUpState(l)}</strong>}
+            </label>
             <textarea value={noteDrafts[l.id] ?? l.notes ?? ''} maxLength={2000} rows={2}
               placeholder="Call notes / next step" aria-label={`Notes for ${l.address || l.county}`}
               onChange={e => setNoteDrafts(d => ({ ...d, [l.id]: e.target.value }))} onBlur={e => saveNotes(l, e.target.value)}

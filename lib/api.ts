@@ -127,12 +127,14 @@ export async function updateSavedLead(
   status?: SavedLeadStatus,
   notes?: string,
   amounts?: { quoted_amount?: number | null; won_amount?: number | null },
+  followUpAt?: string | null,
 ): Promise<{ lead: SavedLead }> {
-  const body: { status?: SavedLeadStatus; notes?: string; quoted_amount?: number | null; won_amount?: number | null } = {};
+  const body: { status?: SavedLeadStatus; notes?: string; quoted_amount?: number | null; won_amount?: number | null; follow_up_at?: string | null } = {};
   if (status !== undefined) body.status = status;
   if (notes !== undefined) body.notes = notes;
   if (amounts && 'quoted_amount' in amounts) body.quoted_amount = amounts.quoted_amount;
   if (amounts && 'won_amount' in amounts) body.won_amount = amounts.won_amount;
+  if (followUpAt !== undefined) body.follow_up_at = followUpAt;
   const res = await apiFetch(`/saved-leads/${encodeURIComponent(id)}`, getToken, {
     method: 'PATCH', body,
   });
