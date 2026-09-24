@@ -74,6 +74,18 @@ describe('checkout-intent: allowlist & round-trip', () => {
     expect(params.county).toBe('broward');
     expect(params.trade).toBeUndefined();
   });
+
+  it('normalizes first-party email outreach attribution before GA4/Stripe handoff', () => {
+    const { params } = readIntent(new URLSearchParams('plan=starter&source=outreach&utm_medium=bhgefbdu'));
+    expect(params.utm_source).toBe('email');
+    expect(params.utm_medium).toBe('outreach');
+  });
+
+  it('preserves explicit non-email acquisition attribution', () => {
+    const { params } = readIntent(new URLSearchParams('plan=pro&utm_source=google&utm_medium=cpc'));
+    expect(params.utm_source).toBe('google');
+    expect(params.utm_medium).toBe('cpc');
+  });
 });
 
 // ── Intent contract: safe first-party redirect (no open redirect) ──────────────

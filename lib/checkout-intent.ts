@@ -70,6 +70,24 @@ export function sanitizeSourcePath(v: unknown): string | null {
 
 export type IntentParams = Partial<Record<(typeof INTENT_FIELDS)[number], string>>;
 
+const EMAIL_MEDIUMS = new Set(['email', 'e-mail', 'e_mail', 'newsletter', 'outreach']);
+
+/** Normalize acquisition fields at the app boundary. Historical links used
+ * source=outreach without canonical UTM fields; malformed/opaque utm_medium
+ * values then leaked into GA4. Preserve explicit valid UTMs, but repair known
+ * first-party email intent to the canonical email/outreach pair. */
+export function normalizeAttribution(params: IntentParams): IntentParams {
+  const out: IntentParams = { ...params };
+  const source = (out.utm_source || out.source || '').trim().toLowerCase();
+  const medium = (out.utm_medium || '').trim().toLowerCase();
+  const looksEmail = source === 'email' || source === 'outreach' || EMAIL_MEDIUMS.has(medium);
+  if (looksEmail) {
+    out.utm_source = 'email';
+    out.utm_medium = 'outreach';
+  }
+  return out;
+}
+
 // Accepts URLSearchParams / ReadonlyURLSearchParams (`.get`) or a Next `searchParams`
 // record (`string | string[] | undefined`). Anything else reads as empty.
 type ParamSource =
@@ -106,7 +124,7 @@ export function readIntent(src: ParamSource): { plan: Plan | null; params: Inten
     const clean = sanitizeSourcePath(params.source_path);
     if (clean) params.source_path = clean; else delete params.source_path;
   }
-  return { plan, params };
+  return { plan, params: normalizeAttribution(params) };
 }
 
 /** Serialize plan + allowlisted params to a URL-encoded query string (stable order). */
