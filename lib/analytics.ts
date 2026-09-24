@@ -51,6 +51,18 @@ const GA4_FUNNEL_EVENTS = new Set<AnalyticsEvent>([
   'checkout_resume_failed',
 ]);
 
+function mirrorToClarity(event: AnalyticsEvent, props: TrackProps): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const w = window as typeof window & { clarity?: (...args: unknown[]) => void };
+    if (typeof w.clarity !== 'function') return;
+    w.clarity('event', event);
+    if (props.plan) w.clarity('set', 'plan', props.plan);
+    if (props.source) w.clarity('set', 'source', props.source);
+    if (props.county) w.clarity('set', 'county', props.county);
+  } catch { /* Clarity is best-effort; first-party analytics remains authoritative. */ }
+}
+
 function mirrorToGa4(event: AnalyticsEvent, props: TrackProps): void {
   if (typeof window === 'undefined' || !GA4_FUNNEL_EVENTS.has(event)) return;
   try {
@@ -76,6 +88,7 @@ function mirrorToGa4(event: AnalyticsEvent, props: TrackProps): void {
 export function track(getToken: GetToken | undefined, event: AnalyticsEvent, props: TrackProps = {}): void {
   // Mirror synchronously before a navigation can unload the page. No PII or opaque IDs are sent.
   mirrorToGa4(event, props);
+  mirrorToClarity(event, props);
 
   // Detached async; nothing awaits it, and every failure path is swallowed.
   void (async () => {
