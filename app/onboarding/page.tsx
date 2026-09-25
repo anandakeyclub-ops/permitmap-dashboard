@@ -37,6 +37,7 @@ export default function OnboardingPage() {
   const [selCounties, setSelCounties] = useState<string[]>([]);
   const [selTrades, setSelTrades] = useState<string[]>([]);
   const [countyQuery, setCountyQuery] = useState('');
+  const [showAllMarkets, setShowAllMarkets] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
@@ -70,8 +71,8 @@ export default function OnboardingPage() {
   const visibleCounties = useMemo(() => {
     const q = countyQuery.trim().toLowerCase();
     const rows = q ? counties.filter(c => cleanMarketName(c).toLowerCase().includes(q)) : counties;
-    return rows.slice(0, 12);
-  }, [counties, countyQuery]);
+    return (q || showAllMarkets) ? rows : rows.slice(0, 12);
+  }, [counties, countyQuery, showAllMarkets]);
   const canSubmit = useMemo(
     () => (allCounties || selCounties.length >= 1) && selTrades.length >= 1 && !saving,
     [allCounties, selCounties, selTrades, saving]);
@@ -105,15 +106,15 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main style={{ maxWidth: 1080, margin: '0 auto', padding: '48px 24px 72px', color: '#0f172a', fontFamily: 'Inter, ui-sans-serif, system-ui', background: '#f8fafc', minHeight: '100vh' }}>
-      <div style={{ color: '#2563eb', fontSize: 12, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', marginBottom: 8 }}>Let&apos;s get you set up</div>
+    <main style={{ maxWidth: 1180, margin: '0 auto', padding: '48px 24px 72px', color: 'var(--pm-text-primary)', fontFamily: 'var(--pm-font-family)', background: 'var(--pm-background-base)', minHeight: '100vh' }}>
+      <div style={{ color: 'var(--pm-accent-on-soft)', fontSize: 11, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', marginBottom: 8 }}>PermitMap workspace setup</div>
       <h1 style={{ fontSize: 42, letterSpacing: '-.035em', margin: '0 0 12px' }}>Choose what PermitMap should deliver</h1>
-      <p>Your <strong style={{ textTransform: 'capitalize' }}>{tier}</strong> plan includes{' '}
+      <p style={{ color:'var(--pm-text-secondary)', maxWidth:760, lineHeight:1.65 }}>Your <strong style={{ textTransform: 'capitalize', color:'var(--pm-text-primary)' }}>{tier}</strong> plan includes{' '}
         {allCounties ? 'every supported county' : `up to ${limit} count${limit === 1 ? 'y' : 'ies'}`}.
         Choose the markets and trades you actually work. You can change these later.</p>
 
       <section aria-label="Subscription expectations" style={{
-        background: 'linear-gradient(145deg,#eff6ff,#fff)', border: '1px solid #dbeafe', borderRadius: 16,
+        background: 'linear-gradient(135deg,var(--pm-background-raised),var(--pm-background-panel))', border: '1px solid var(--pm-border-default)', borderRadius: 12,
         padding: '16px 18px', margin: '20px 0', lineHeight: 1.55,
       }}>
         <strong>What happens next</strong>
@@ -125,35 +126,39 @@ export default function OnboardingPage() {
       </section>
 
       {!allCounties && (
-        <section aria-labelledby="counties-h" style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:16, padding:24, boxShadow:'0 8px 28px rgba(15,23,42,.05)', marginTop:22 }}>
+        <section aria-labelledby="counties-h" style={{ background:'var(--pm-background-raised)', border:'1px solid var(--pm-border-default)', borderRadius:12, padding:24, boxShadow:'0 14px 38px rgba(0,0,0,.18)', marginTop:22 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:16, marginBottom:14 }}>
-            <div><h2 id="counties-h" style={{ margin:'0 0 4px', fontSize:20 }}>Choose your market</h2><span style={{ fontSize:13, color:'#64748b' }}>Search by county or city. We&apos;ll prioritize this market first.</span></div>
-            <span style={{ fontSize:12, fontWeight:800, color:selCounties.length===limit?'#15803d':'#64748b', background:selCounties.length===limit?'#f0fdf4':'#f8fafc', padding:'6px 9px', borderRadius:999 }}>{selCounties.length}/{limit} selected</span>
+            <div><h2 id="counties-h" style={{ margin:'0 0 4px', fontSize:20 }}>Choose your market</h2><span style={{ fontSize:13, color:'var(--pm-text-secondary)' }}>Search by county or city. We&apos;ll prioritize this market first.</span></div>
+            <span style={{ fontSize:12, fontWeight:800, color:selCounties.length===limit?'#15803d':'#64748b', background:selCounties.length===limit?'rgba(34,197,94,.12)':'var(--pm-background-panel)', padding:'6px 9px', borderRadius:999 }}>{selCounties.length}/{limit} selected</span>
           </div>
           <input value={countyQuery} onChange={e=>setCountyQuery(e.target.value)} placeholder="Search markets…" aria-label="Search markets"
-            style={{ width:'100%', boxSizing:'border-box', padding:'12px 14px', border:'1px solid #cbd5e1', borderRadius:10, fontSize:14, marginBottom:10 }} />
-          <div style={{ border:'1px solid #e2e8f0', borderRadius:11, overflow:'hidden', maxHeight:290, overflowY:'auto' }}>
+            style={{ width:'100%', boxSizing:'border-box', padding:'12px 14px', border:'1px solid var(--pm-border-strong)', borderRadius:8, fontSize:14, marginBottom:10, background:'var(--pm-background-panel)', color:'var(--pm-text-primary)', outline:'none' }} />
+          <div style={{ border:'1px solid var(--pm-border-default)', borderRadius:10, overflow:'hidden', maxHeight:290, overflowY:'auto' }}>
             {visibleCounties.map((c,i) => {
               const on = selCounties.includes(c.key);
               return (
                 <button type="button" key={c.key} disabled={!on && atCountyLimit} onClick={()=>toggleCounty(c.key)}
-                  style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', textAlign:'left', padding:'12px 14px', border:0, borderTop:i?'1px solid #eef2f7':0, background:on?'#eff6ff':'#fff', color:on?'#1d4ed8':'#334155', fontWeight:on?800:650, cursor:!on&&atCountyLimit?'not-allowed':'pointer', opacity:!on&&atCountyLimit?.45:1 }}>
-                  <span>{cleanMarketName(c)}</span><span style={{ width:18,height:18,borderRadius:999,border:on?'5px solid #2563eb':'1.5px solid #cbd5e1',background:'#fff',boxSizing:'border-box' }} />
+                  style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', textAlign:'left', padding:'12px 14px', border:0, borderTop:i?'1px solid var(--pm-border-default)':0, background:on?'var(--pm-accent-soft)':'var(--pm-background-panel)', color:on?'var(--pm-accent-on-soft)':'var(--pm-text-primary)', fontWeight:on?800:650, cursor:!on&&atCountyLimit?'not-allowed':'pointer', opacity:!on&&atCountyLimit?.45:1 }}>
+                  <span>{cleanMarketName(c)}</span><span style={{ width:18,height:18,borderRadius:999,border:on?'5px solid var(--pm-accent-primary)':'1.5px solid var(--pm-border-strong)',background:'#fff',boxSizing:'border-box' }} />
                 </button>
               );
             })}
             {counties.length === 0 && <div style={{ padding:16, color:'#64748b' }}>Loading markets…</div>}
             {counties.length > 0 && visibleCounties.length === 0 && <div style={{ padding:16, color:'#64748b' }}>No matching markets.</div>}
           </div>
+          {!countyQuery && counties.length > 12 && <button type="button" onClick={()=>setShowAllMarkets(v=>!v)}
+            style={{ marginTop:10, width:'100%', padding:'10px 12px', borderRadius:8, border:'1px solid var(--pm-border-strong)', background:'transparent', color:'var(--pm-accent-on-soft)', fontWeight:700, cursor:'pointer' }}>
+            {showAllMarkets ? 'Show fewer markets' : `View all ${counties.length} markets`}
+          </button>}
         </section>
       )}
 
-      <section aria-labelledby="trades-h" style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:16, padding:24, boxShadow:'0 8px 28px rgba(15,23,42,.05)', marginTop:18 }}>
+      <section aria-labelledby="trades-h" style={{ background:'var(--pm-background-raised)', border:'1px solid var(--pm-border-default)', borderRadius:12, padding:24, boxShadow:'0 14px 38px rgba(0,0,0,.18)', marginTop:18 }}>
         <h2 id="trades-h">Trades</h2>
-        <p style={{ marginTop: -8, color: '#475569' }}>Select at least one so your dashboard and weekly delivery prioritize relevant work.</p>
+        <p style={{ marginTop: -8, color: 'var(--pm-text-secondary)' }}>Select at least one so your dashboard and weekly delivery prioritize relevant work.</p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
           {SUPPORTED_TRADES.map((t) => (
-            <label key={t} style={{ padding: '16px 14px', border: selTrades.includes(t) ? '2px solid #2563eb' : '1px solid #cbd5e1', borderRadius: 12, background: selTrades.includes(t) ? '#eff6ff' : '#fff', fontWeight: 700, textTransform: 'capitalize' }}>
+            <label key={t} style={{ padding: '16px 14px', border: selTrades.includes(t) ? '2px solid var(--pm-accent-primary)' : '1px solid var(--pm-border-strong)', borderRadius: 10, background: selTrades.includes(t) ? 'var(--pm-accent-soft)' : 'var(--pm-background-panel)', color: selTrades.includes(t) ? 'var(--pm-accent-on-soft)' : 'var(--pm-text-primary)', fontWeight: 700, textTransform: 'capitalize' }}>
               <input type="checkbox" checked={selTrades.includes(t)} onChange={() => toggleTrade(t)} />
               {' '}{t.replace(/_/g, ' ')}
             </label>
@@ -166,7 +171,7 @@ export default function OnboardingPage() {
       )}
 
       <button onClick={submit} disabled={!canSubmit} aria-disabled={!canSubmit}
-        style={{ marginTop: 24, width: '100%', padding: '15px 20px', borderRadius: 11, border: 0, background: canSubmit ? 'linear-gradient(90deg,#1d4ed8,#2563eb)' : '#cbd5e1', color: '#fff', fontSize: 16, fontWeight: 800, cursor: canSubmit ? 'pointer' : 'not-allowed', boxShadow: canSubmit ? '0 8px 20px rgba(37,99,235,.22)' : 'none' }}>
+        style={{ marginTop: 24, width: '100%', padding: '15px 20px', borderRadius: 11, border: 0, background: canSubmit ? 'linear-gradient(90deg,var(--pm-accent-primary),var(--pm-accent-hover))' : 'var(--pm-border-strong)', color: '#fff', fontSize: 16, fontWeight: 800, cursor: canSubmit ? 'pointer' : 'not-allowed', boxShadow: canSubmit ? '0 8px 20px rgba(37,99,235,.22)' : 'none' }}>
         {saving ? 'Saving…' : done ? 'Saved' : isProvisionedEntitlement ? 'Save delivery preferences' : 'Activate my permit delivery'}
       </button>
     </main>
