@@ -20,6 +20,9 @@ export default function OnboardingPage() {
   const limit = entitlementCountyLimit(tier);
   const allCounties = ALL_COUNTY_TIERS.has(tier);
   const monthlyPrice: Record<string, number> = { starter: 79, pro: 149, team: 299 };
+  const billingStatus = (user?.publicMetadata?.billing_status as string) || '';
+  const isTrialing = billingStatus === 'trialing';
+  const hasBillingLink = !!user?.publicMetadata?.stripe_subscription_id || !!user?.publicMetadata?.stripe_customer_id;
 
   const [counties, setCounties] = useState<CountyOpt[]>([]);
   const [selCounties, setSelCounties] = useState<string[]>([]);
@@ -77,32 +80,33 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}>
-      <h1>Choose what PermitMap should deliver</h1>
+    <main style={{ maxWidth: 1080, margin: '0 auto', padding: '48px 24px 72px', color: '#0f172a', fontFamily: 'Inter, ui-sans-serif, system-ui', background: '#f8fafc', minHeight: '100vh' }}>
+      <div style={{ color: '#2563eb', fontSize: 12, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', marginBottom: 8 }}>Let&apos;s get you set up</div>
+      <h1 style={{ fontSize: 42, letterSpacing: '-.035em', margin: '0 0 12px' }}>Choose what PermitMap should deliver</h1>
       <p>Your <strong style={{ textTransform: 'capitalize' }}>{tier}</strong> plan includes{' '}
         {allCounties ? 'every supported county' : `up to ${limit} count${limit === 1 ? 'y' : 'ies'}`}.
         Choose the markets and trades you actually work. You can change these later.</p>
 
       <section aria-label="Subscription expectations" style={{
-        background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12,
+        background: 'linear-gradient(145deg,#eff6ff,#fff)', border: '1px solid #dbeafe', borderRadius: 16,
         padding: '16px 18px', margin: '20px 0', lineHeight: 1.55,
       }}>
         <strong>What happens next</strong>
         <ol style={{ margin: '8px 0 0', paddingLeft: 20 }}>
           <li>We configure your dashboard and ranked opportunity queue.</li>
           <li>Your permit summary arrives by email each week; the dashboard holds the full workflow.</li>
-          <li>Your 14-day trial automatically converts to <strong>${monthlyPrice[tier]}/month</strong> unless you cancel before it ends.</li>
+          <li>{isTrialing ? <>Your current 14-day trial converts to <strong>${monthlyPrice[tier]}/month</strong> unless you cancel before it ends.</> : hasBillingLink ? <>Your existing subscription remains unchanged; this step only configures delivery preferences.</> : <>Your saved preferences configure your dashboard and weekly delivery.</>}</li>
         </ol>
       </section>
 
       {!allCounties && (
         <section aria-labelledby="counties-h">
           <h2 id="counties-h">Counties {`(${selCounties.length}/${limit})`}</h2>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
             {counties.map((c) => {
               const on = selCounties.includes(c.key);
               return (
-                <label key={c.key} style={{ opacity: !on && atCountyLimit ? 0.5 : 1 }}>
+                <label key={c.key} style={{ opacity: !on && atCountyLimit ? 0.5 : 1, padding: '12px 14px', border: on ? '2px solid #2563eb' : '1px solid #cbd5e1', borderRadius: 10, background: on ? '#eff6ff' : '#fff', fontWeight: 650 }}>
                   <input type="checkbox" checked={on} disabled={!on && atCountyLimit} onChange={() => toggleCounty(c.key)} />
                   {' '}{c.label || c.key}
                 </label>
@@ -116,9 +120,9 @@ export default function OnboardingPage() {
       <section aria-labelledby="trades-h">
         <h2 id="trades-h">Trades</h2>
         <p style={{ marginTop: -8, color: '#475569' }}>Select at least one so your dashboard and weekly delivery prioritize relevant work.</p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
           {SUPPORTED_TRADES.map((t) => (
-            <label key={t}>
+            <label key={t} style={{ padding: '16px 14px', border: selTrades.includes(t) ? '2px solid #2563eb' : '1px solid #cbd5e1', borderRadius: 12, background: selTrades.includes(t) ? '#eff6ff' : '#fff', fontWeight: 700, textTransform: 'capitalize' }}>
               <input type="checkbox" checked={selTrades.includes(t)} onChange={() => toggleTrade(t)} />
               {' '}{t.replace(/_/g, ' ')}
             </label>
@@ -131,8 +135,8 @@ export default function OnboardingPage() {
       )}
 
       <button onClick={submit} disabled={!canSubmit} aria-disabled={!canSubmit}
-        style={{ marginTop: 16, padding: '10px 16px' }}>
-        {saving ? 'Saving…' : done ? 'Saved' : 'Activate my permit delivery'}
+        style={{ marginTop: 24, width: '100%', padding: '15px 20px', borderRadius: 11, border: 0, background: canSubmit ? 'linear-gradient(90deg,#1d4ed8,#2563eb)' : '#cbd5e1', color: '#fff', fontSize: 16, fontWeight: 800, cursor: canSubmit ? 'pointer' : 'not-allowed', boxShadow: canSubmit ? '0 8px 20px rgba(37,99,235,.22)' : 'none' }}>
+        {saving ? 'Saving…' : done ? 'Saved' : hasBillingLink ? 'Save delivery preferences' : 'Activate my permit delivery'}
       </button>
     </main>
   );
