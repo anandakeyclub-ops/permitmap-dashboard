@@ -44,11 +44,21 @@ export default function OnboardingPage() {
 
   // Canonical county options from the API (authoritative slugs).
   useEffect(() => {
-    apiFetch('/counties', getToken)
-      .then((r: any) => r.json())
-      .then((d: any) => setCounties((d?.counties || []).filter((c: CountyOpt) => c.key)))
-      .catch(() => setCounties([]));
-  }, [getToken]);
+    let cancelled = false;
+    (async () => {
+      try {
+        // County taxonomy is public product configuration. Do not make onboarding depend on a
+        // Clerk JWT template/session being accepted by the data API during an auth migration.
+        const r = await apiFetch('/counties');
+        if (!r.ok) throw new Error(`counties_${r.status}`);
+        const d: any = await r.json();
+        if (!cancelled) setCounties((d?.counties || []).filter((c: CountyOpt) => c.key));
+      } catch {
+        if (!cancelled) setCounties([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const atCountyLimit = !allCounties && selCounties.length >= limit;
   const canSubmit = useMemo(
