@@ -64,7 +64,9 @@ function ResumeCheckout() {
 
     inFlight.current = true;
     setStatus('working');
-    // Real resume boundary: authenticated user with a valid paid plan is about to POST /api/checkout.
+    // Real resume boundary: Clerk has definitively authenticated this paid-intent visitor.
+    // This is the durable post-auth truth signal; unlike signup_completed it cannot be lost merely
+    // because Clerk redirects away from /sign-up before that component observes the auth transition.
     track(getToken, 'checkout_resume_started', { plan, source: 'checkout_resume' });
     startCheckout(plan, { attribution: params, currentPath: '/checkout/resume' })
       .then((res) => {
