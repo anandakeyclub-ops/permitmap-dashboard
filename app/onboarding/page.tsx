@@ -11,7 +11,12 @@ import { apiFetch } from '../../lib/api';
 import { SUPPORTED_TRADES, entitlementCountyLimit, ALL_COUNTY_TIERS, migrateLegacySelectedCounties } from '../../lib/onboarding';
 import { saveOnboardingSelections } from '../actions';
 
-interface CountyOpt { key: string; label: string; count?: number }
+interface CountyOpt { key: string; label: string; count?: number; state?: string }
+function cleanMarketName(c: CountyOpt): string {
+  const base = c.key.split('_').map(x => x ? x[0].toUpperCase() + x.slice(1) : x).join(' ');
+  const county = /county/i.test(c.label || '') && !/county$/i.test(base) ? ' County' : '';
+  return `${base}${county}${c.state && c.state !== 'FL' ? `, ${c.state}` : ''}`;
+}
 
 export default function OnboardingPage() {
   const { user, isLoaded } = useUser();
@@ -31,6 +36,7 @@ export default function OnboardingPage() {
   const [counties, setCounties] = useState<CountyOpt[]>([]);
   const [selCounties, setSelCounties] = useState<string[]>([]);
   const [selTrades, setSelTrades] = useState<string[]>([]);
+  const [countyQuery, setCountyQuery] = useState('');
   const [errors, setErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
@@ -61,6 +67,11 @@ export default function OnboardingPage() {
   }, []);
 
   const atCountyLimit = !allCounties && selCounties.length >= limit;
+  const visibleCounties = useMemo(() => {
+    const q = countyQuery.trim().toLowerCase();
+    const rows = q ? counties.filter(c => cleanMarketName(c).toLowerCase().includes(q)) : counties;
+    return rows.slice(0, 12);
+  }, [counties, countyQuery]);
   const canSubmit = useMemo(
     () => (allCounties || selCounties.length >= 1) && selTrades.length >= 1 && !saving,
     [allCounties, selCounties, selTrades, saving]);
@@ -114,24 +125,30 @@ export default function OnboardingPage() {
       </section>
 
       {!allCounties && (
-        <section aria-labelledby="counties-h">
-          <h2 id="counties-h">Counties {`(${selCounties.length}/${limit})`}</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
-            {counties.map((c) => {
+        <section aria-labelledby="counties-h" style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:16, padding:24, boxShadow:'0 8px 28px rgba(15,23,42,.05)', marginTop:22 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:16, marginBottom:14 }}>
+            <div><h2 id="counties-h" style={{ margin:'0 0 4px', fontSize:20 }}>Choose your market</h2><span style={{ fontSize:13, color:'#64748b' }}>Search by county or city. We&apos;ll prioritize this market first.</span></div>
+            <span style={{ fontSize:12, fontWeight:800, color:selCounties.length===limit?'#15803d':'#64748b', background:selCounties.length===limit?'#f0fdf4':'#f8fafc', padding:'6px 9px', borderRadius:999 }}>{selCounties.length}/{limit} selected</span>
+          </div>
+          <input value={countyQuery} onChange={e=>setCountyQuery(e.target.value)} placeholder="Search markets…" aria-label="Search markets"
+            style={{ width:'100%', boxSizing:'border-box', padding:'12px 14px', border:'1px solid #cbd5e1', borderRadius:10, fontSize:14, marginBottom:10 }} />
+          <div style={{ border:'1px solid #e2e8f0', borderRadius:11, overflow:'hidden', maxHeight:290, overflowY:'auto' }}>
+            {visibleCounties.map((c,i) => {
               const on = selCounties.includes(c.key);
               return (
-                <label key={c.key} style={{ opacity: !on && atCountyLimit ? 0.5 : 1, padding: '12px 14px', border: on ? '2px solid #2563eb' : '1px solid #cbd5e1', borderRadius: 10, background: on ? '#eff6ff' : '#fff', fontWeight: 650 }}>
-                  <input type="checkbox" checked={on} disabled={!on && atCountyLimit} onChange={() => toggleCounty(c.key)} />
-                  {' '}{c.label || c.key}
-                </label>
+                <button type="button" key={c.key} disabled={!on && atCountyLimit} onClick={()=>toggleCounty(c.key)}
+                  style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', textAlign:'left', padding:'12px 14px', border:0, borderTop:i?'1px solid #eef2f7':0, background:on?'#eff6ff':'#fff', color:on?'#1d4ed8':'#334155', fontWeight:on?800:650, cursor:!on&&atCountyLimit?'not-allowed':'pointer', opacity:!on&&atCountyLimit?.45:1 }}>
+                  <span>{cleanMarketName(c)}</span><span style={{ width:18,height:18,borderRadius:999,border:on?'5px solid #2563eb':'1.5px solid #cbd5e1',background:'#fff',boxSizing:'border-box' }} />
+                </button>
               );
             })}
-            {counties.length === 0 && <span>Loading counties…</span>}
+            {counties.length === 0 && <div style={{ padding:16, color:'#64748b' }}>Loading markets…</div>}
+            {counties.length > 0 && visibleCounties.length === 0 && <div style={{ padding:16, color:'#64748b' }}>No matching markets.</div>}
           </div>
         </section>
       )}
 
-      <section aria-labelledby="trades-h">
+      <section aria-labelledby="trades-h" style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:16, padding:24, boxShadow:'0 8px 28px rgba(15,23,42,.05)', marginTop:18 }}>
         <h2 id="trades-h">Trades</h2>
         <p style={{ marginTop: -8, color: '#475569' }}>Select at least one so your dashboard and weekly delivery prioritize relevant work.</p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
