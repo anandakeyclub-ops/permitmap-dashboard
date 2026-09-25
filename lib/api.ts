@@ -32,10 +32,17 @@ export async function apiFetch(
   const headers: Record<string, string> = { ...(init?.headers || {}) };
   if (getToken) {
     try {
-      const token = await getToken({ template: 'api' });
+      // Prefer the historical "api" JWT template, but production Clerk migrations may not carry
+      // instance-local JWT templates. Fall back to the default Clerk session token instead of
+      // silently sending an anonymous request and leaving authenticated screens stuck loading.
+      let token: string | null = null;
+      try { token = await getToken({ template: 'api' }); } catch { /* fall through */ }
+      if (!token) {
+        try { token = await getToken(); } catch { /* API will surface auth failure */ }
+      }
       if (token) headers['Authorization'] = `Bearer ${token}`;
     } catch {
-      // Token retrieval failed — proceed unauthenticated (API is OFF → anonymous OK).
+      // Network callers retain their existing error handling.
     }
   }
   const opts: RequestInit = { method: init?.method, headers };

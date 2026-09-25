@@ -23,6 +23,10 @@ export default function OnboardingPage() {
   const billingStatus = (user?.publicMetadata?.billing_status as string) || '';
   const isTrialing = billingStatus === 'trialing';
   const hasBillingLink = !!user?.publicMetadata?.stripe_subscription_id || !!user?.publicMetadata?.stripe_customer_id;
+  // Reaching this page with a paid tier means PermitMap is configuring an already-provisioned
+  // entitlement. Checkout happens before provisioning; onboarding itself must never imply/create
+  // another purchase. This also covers legacy/manual tier grants that intentionally have no Stripe ids.
+  const isProvisionedEntitlement = ['starter', 'pro', 'team'].includes(tier);
 
   const [counties, setCounties] = useState<CountyOpt[]>([]);
   const [selCounties, setSelCounties] = useState<string[]>([]);
@@ -136,7 +140,7 @@ export default function OnboardingPage() {
 
       <button onClick={submit} disabled={!canSubmit} aria-disabled={!canSubmit}
         style={{ marginTop: 24, width: '100%', padding: '15px 20px', borderRadius: 11, border: 0, background: canSubmit ? 'linear-gradient(90deg,#1d4ed8,#2563eb)' : '#cbd5e1', color: '#fff', fontSize: 16, fontWeight: 800, cursor: canSubmit ? 'pointer' : 'not-allowed', boxShadow: canSubmit ? '0 8px 20px rgba(37,99,235,.22)' : 'none' }}>
-        {saving ? 'Saving…' : done ? 'Saved' : hasBillingLink ? 'Save delivery preferences' : 'Activate my permit delivery'}
+        {saving ? 'Saving…' : done ? 'Saved' : isProvisionedEntitlement ? 'Save delivery preferences' : 'Activate my permit delivery'}
       </button>
     </main>
   );
