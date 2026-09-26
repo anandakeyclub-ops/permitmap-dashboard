@@ -119,3 +119,37 @@
 .pm-brand-shell { background: var(--pm-brand-base); color: var(--pm-text-primary); }
 .pm-brand-wordmark { color: var(--pm-text-primary); font-weight: 700; letter-spacing: -.02em; }
 .pm-brand-wordmark-map { color: var(--pm-brand-primary); }
+
+
+/* ── Enterprise dashboard responsive architecture ───────────────────────────
+   Keep information dense on desktop, but collapse cleanly for contractor phones/tablets. */
+.pm-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.pm-intelligence-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr);
+}
+.pm-dashboard-tabs {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.pm-dashboard-tabs::-webkit-scrollbar { display: none; }
+.pm-dashboard-tabs > button { flex: 0 0 auto; min-height: 42px; }
+
+@media (max-width: 980px) {
+  .pm-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pm-intelligence-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .pm-kpi-grid { grid-template-columns: 1fr; gap: 10px !important; }
+  .pm-dashboard-tabs {
+    margin-left: -4px;
+    margin-right: -4px;
+    padding: 0 4px;
+  }
+  .pm-dashboard-tabs > button { padding-left: 14px !important; padding-right: 14px !important; }
+}
