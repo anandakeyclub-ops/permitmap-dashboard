@@ -1206,7 +1206,11 @@ export default function Dashboard() {
                     onPermits={() => setActiveTab('permits')}
                     onSaved={() => setActiveTab('saved')}
                   />
-                  {digest && <DigestCard digest={digest} label={summary.label} county={county} onView={goToQueue} />}
+                  {digest && <DigestCard digest={digest} label={summary.label} county={county}
+                    tradeLabel={primaryTrade || undefined}
+                    opportunityCount={scored.length}
+                    topOpportunity={scored[0] || null}
+                    onView={goToQueue} />}
                 </>
               )}
 
@@ -1229,8 +1233,9 @@ export default function Dashboard() {
                     </div>
                   ))}
 
-                  {/* Top opportunity */}
-                  {summary.targeting?.top_opportunity?.address && (
+                  {/* Action recommendation uses the SAME personalized scored queue as Opportunities.
+                      Never substitute county-wide targeting for a contractor-specific pursuit decision. */}
+                  {scored[0]?.FULL_ADDRESS && (
                     <div style={{
                       background: 'linear-gradient(135deg, #14532d20, #0f172a)',
                       border: '1px solid #22c55e40', borderRadius: 12,
@@ -1238,18 +1243,19 @@ export default function Dashboard() {
                     }}>
                       <div style={{ fontSize: 11, color: '#22c55e', fontWeight: 700,
                         textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
-                        🎯 Top Opportunity This Week
+                        Next best action · {primaryTrade ? primaryTrade.replace(/_/g, ' ') : 'opportunity'}
                       </div>
                       <div style={{ fontSize: 18, fontWeight: 700, color: '#f1f5f9',
                         marginBottom: 4 }}>
-                        {summary.targeting.top_opportunity.address}
+                        {scored[0].FULL_ADDRESS}
                       </div>
-                      <div style={{ display: 'flex', gap: 16, fontSize: 13, color: '#64748b' }}>
-                        <span>{summary.targeting.top_opportunity.type}</span>
-                        <span style={{ color: '#22c55e' }}>
-                          Score: {summary.targeting.top_opportunity.score}/100
-                        </span>
+                      <div style={{ display: 'flex', gap: 16, fontSize: 13, color: '#64748b', flexWrap:'wrap' }}>
+                        <span>{scored[0].PERMIT_DESCRIPTION || scored[0].RECORD_TYPE || 'Permit opportunity'}</span>
+                        <span style={{ color: '#22c55e' }}>Priority score: {scored[0].score}/100</span>
                       </div>
+                      <button type="button" onClick={goToQueue} className="pm-btn-secondary" style={{marginTop:14}}>
+                        Open ranked queue →
+                      </button>
                     </div>
                   )}
                 </div>

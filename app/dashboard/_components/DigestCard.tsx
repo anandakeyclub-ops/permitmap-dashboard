@@ -53,8 +53,8 @@ function Highlight({ icon: Icon, label, value }: { icon: any; label: string; val
   );
 }
 
-export default function DigestCard({ digest, label, county, onView }:
-  { digest: any; label?: string; county: string; onView: () => void }) {
+export default function DigestCard({ digest, label, county, tradeLabel, opportunityCount, topOpportunity, onView }:
+  { digest: any; label?: string; county: string; tradeLabel?: string; opportunityCount?: number; topOpportunity?: any; onView: () => void }) {
 
   const periodKey = isoWeekKey();
   const storeKey = `digest-dismissed:${county}:${periodKey}`;
@@ -66,8 +66,11 @@ export default function DigestCard({ digest, label, county, onView }:
   if (!digest || total <= 0) return null;            // graceful: no empty shell
 
   const { hottestZip, mostActive, avgValue } = parseBriefing(digest.body_preview);
-  const top = (digest.top_permits || [])[0] || null;
+  // Digest remains the county-wide market snapshot, while the action row below uses the exact
+  // personalized Opportunity Queue passed by the dashboard.
+  const top = topOpportunity || null;
   const title = `This Week in ${label || 'your market'}`;
+  const actionLabel = tradeLabel ? tradeLabel.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Ranked';
 
   const dismiss = () => {
     try { localStorage.setItem(storeKey, '1'); } catch {}
@@ -133,10 +136,11 @@ export default function DigestCard({ digest, label, county, onView }:
           background: '#0c1211', border: '1px solid #23312d', borderRadius: 10, marginBottom: 18 }}>
           <Building2 size={16} color="#22c55e" style={{ flexShrink: 0 }} />
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>Top project</div>
+            <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>{actionLabel} next action</div>
             <div style={{ fontSize: 13, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {(top.FULL_ADDRESS || '—')}
               {fmtVal(top.FINAL_VALUATION) && <span style={{ color: '#22c55e', fontWeight: 600 }}> · {fmtVal(top.FINAL_VALUATION)}</span>}
+              {typeof top.score === 'number' && <span style={{ color:'#94a3b8', fontWeight:600 }}> · score {top.score}</span>}
             </div>
           </div>
         </div>
