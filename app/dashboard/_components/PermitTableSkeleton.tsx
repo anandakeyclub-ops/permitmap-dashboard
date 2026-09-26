@@ -54,7 +54,7 @@ export default function PermitTableSkeleton({ announce = false }: { announce?: b
           </thead>
           <tbody>
             {Array.from({ length: SKELETON_ROWS }).map((_, i) => (
-              <tr key={i} style={{ borderBottom: '1px solid #0f172a', background: i % 2 === 0 ? '#111827' : '#0d1529' }}>
+              <tr key={i} style={{ borderBottom: '1px solid #090d0c', background: i % 2 === 0 ? '#111827' : '#0c1211' }}>
                 <td style={{ padding: '12px 16px' }}><SkelBlock width={36} height={36} /></td>
                 <td style={{ padding: '12px 16px' }}><SkelBlock width={'80%'} /></td>
                 <td style={{ padding: '12px 16px' }}><SkelBlock width={90} /></td>

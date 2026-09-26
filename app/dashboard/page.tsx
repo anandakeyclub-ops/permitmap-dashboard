@@ -1046,14 +1046,19 @@ export default function Dashboard() {
                       </div>
                     )}
                     {showPermitEmptyState(permitsLoading, displayedPermits.length) && (
-                      <div style={{ padding: 40, textAlign: 'center', color: '#475569' }}>
-                        {(committedRange.from || committedRange.to)
-                          ? ((search || tradeFilter)
-                              ? 'No permits match your filters in this date range.'
-                              : 'No permits were found in this date range.')
-                          : (search
-                              ? 'No permits match your search and current filters.'
-                              : 'No permits found for this filter.')}
+                      <div style={{padding:'34px 24px',textAlign:'center',background:'#0c1211',borderTop:'1px solid #23312d'}}>
+                        <div style={{width:38,height:38,borderRadius:10,background:'rgba(52,211,153,.08)',border:'1px solid #34d39930',display:'grid',placeItems:'center',margin:'0 auto 12px'}}><Target size={17} color="#34d399"/></div>
+                        <strong style={{display:'block',fontSize:14,color:'#e2e8f0',marginBottom:5}}>
+                          {(search || tradeFilter || committedRange.from || committedRange.to) ? 'No permits match this view' : 'No permits in this market yet'}
+                        </strong>
+                        <span style={{display:'block',fontSize:12,color:'#64748b',lineHeight:1.5,maxWidth:440,margin:'0 auto 14px'}}>
+                          {(committedRange.from || committedRange.to)
+                            ? 'Try widening the history range or clearing one of the active filters.'
+                            : (search || tradeFilter)
+                              ? 'Clear the search or trade filter to return to the full authorized permit list.'
+                              : 'PermitMap will populate this view as covered permit records become available.'}
+                        </span>
+                        {(search || tradeFilter || committedRange.from || committedRange.to) && <button type="button" className="pm-btn-secondary" onClick={()=>{setSearch('');setCommittedQuery('');setTradeFilter('');setDatePreset('all');setDateFrom('');setDateTo('');setCommittedRange({from:null,to:null});}}>Clear filters</button>}
                       </div>
                     )}
                     {tier === 'starter' && permits.length >= 50 && (

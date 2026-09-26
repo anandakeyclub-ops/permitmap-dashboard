@@ -27,7 +27,7 @@ export default function DashboardLoadingSkeleton() {
         <div style={{ display: 'flex', gap: 12, marginTop: 20, flexWrap: 'wrap' }}>
           {[0, 1, 2, 3].map(i => (
             <div key={i} style={{
-              flex: '1 1 180px', background: '#111827', border: '1px solid #1e293b',
+              flex: '1 1 180px', background: '#101816', border: '1px solid #1e293b',
               borderRadius: 12, padding: '20px 24px', borderTop: '3px solid #1e293b',
             }}>
               <Block width={90} height={11} />
