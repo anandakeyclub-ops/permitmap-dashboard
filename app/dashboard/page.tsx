@@ -746,14 +746,26 @@ export default function Dashboard() {
               {/* Tabs */}
               <div className="pm-dashboard-tabs" style={{ gap: 4, marginBottom: 20,
                 borderBottom: '1px solid #23312d', paddingBottom: 0 }}>
-                {(['opportunities', 'permits', 'trends', 'insights', 'saved'] as const).map(tab => (
-                  <button key={tab} onClick={() => setActiveTab(tab)} style={{
+                {([
+                  ['opportunities','Opportunities'],
+                  ['saved','Work Queue'],
+                  ['permits','Permit Search'],
+                  ['trends','Market Intelligence'],
+                  ['insights','Briefing'],
+                ] as const).map(([tab,label]) => (
+                  <button key={tab} onClick={() => setActiveTab(tab)} title={
+                    tab==='opportunities'?'Ranked permits worth pursuing':
+                    tab==='saved'?'Saved leads, follow-ups, quotes and outcomes':
+                    tab==='permits'?'Search and export the authorized permit dataset':
+                    tab==='trends'?'Demand, valuation, trade and ZIP movement':
+                    'Plain-language market observations'
+                  } style={{
                     padding: '8px 18px', background: 'none', border: 'none',
-                    cursor: 'pointer', fontSize: 13, fontWeight: 600,
-                    color: activeTab === tab ? '#3b82f6' : '#475569',
+                    cursor: 'pointer', fontSize: 13, fontWeight: 650,
+                    color: activeTab === tab ? '#34d399' : '#64748b',
                     borderBottom: activeTab === tab ? '2px solid #34d399' : '2px solid transparent',
-                    textTransform: 'capitalize', marginBottom: -1,
-                  }}>{tab}</button>
+                    marginBottom: -1,
+                  }}>{label}</button>
                 ))}
               </div>
 
