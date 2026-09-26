@@ -36,7 +36,7 @@ import { startCheckout } from '../../lib/start-checkout';
 import SavedLeads from './_components/SavedLeads';
 import { promoteSignupCounty, dismissFirstLogin } from '../actions';
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell
+  BarChart, Bar, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
 import {
   MapPin, TrendingUp, Zap, Building2, Target,
@@ -466,7 +466,20 @@ export default function Dashboard() {
   const recent30 = permits.filter(p => { const d=permitDate(p); return d && nowMs-d.getTime() >= 0 && nowMs-d.getTime() < 30*dayMs; }).length;
   const prior30 = permits.filter(p => { const d=permitDate(p); return d && nowMs-d.getTime() >= 30*dayMs && nowMs-d.getTime() < 60*dayMs; }).length;
   const volumeDelta = prior30 > 0 ? ((recent30-prior30)/prior30)*100 : null;
-
+  const monthlyMap = new Map<string, { month:string; permits:number; value:number; valued:number }>();
+  permits.forEach((p:any) => {
+    const d=permitDate(p); if(!d) return;
+    const key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    const label=d.toLocaleDateString(undefined,{month:'short',year:'2-digit'});
+    const row=monthlyMap.get(key)||{month:label,permits:0,value:0,valued:0};
+    row.permits += 1;
+    const raw=p.FINAL_VALUATION ?? p.final_valuation;
+    const val=Number(String(raw??'').replace(/[^0-9.]/g,''));
+    if(Number.isFinite(val)&&val>0){row.value+=val;row.valued+=1;}
+    monthlyMap.set(key,row);
+  });
+  const monthlyTrend=Array.from(monthlyMap.entries()).sort((a,b)=>a[0].localeCompare(b[0])).slice(-12)
+    .map(entry=>({month:entry[1].month,permits:entry[1].permits,avgValue:entry[1].valued?Math.round(entry[1].value/entry[1].valued):null}));
   // Entitlement-based lock (NOT list position × tier count): a county is locked iff the user
   // is not entitled to it. Fixes entitled counties (e.g. Marion) rendering locked and
   // non-entitled counties rendering available.
@@ -1073,6 +1086,21 @@ export default function Dashboard() {
                       {volumeDelta !== null && <span style={{padding:'6px 9px',borderRadius:999,background:volumeDelta>=0?'rgba(34,197,94,.10)':'rgba(245,158,11,.10)',border:`1px solid ${volumeDelta>=0?'#22c55e40':'#f59e0b40'}`,fontSize:11,color:volumeDelta>=0?'#86efac':'#fcd34d'}}><strong>{volumeDelta>=0?'+':''}{volumeDelta.toFixed(0)}%</strong> permit volume vs prior period</span>}
                     </div>}
                   </div>
+                  {monthlyTrend.length >= 2 && <div style={{background:'#101816',border:'1px solid #23312d',borderRadius:12,padding:'20px 24px',marginBottom:20,boxShadow:'0 14px 34px rgba(0,0,0,.16)'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',gap:14,alignItems:'flex-start',flexWrap:'wrap',marginBottom:12}}>
+                      <div><h3 style={{margin:'0 0 4px',fontSize:13,fontWeight:800,color:'#f8fafc'}}>Permit activity over time</h3><span style={{fontSize:11,color:'#64748b'}}>Monthly issued permits · authorized loaded history</span></div>
+                      <span style={{fontSize:10,color:'#94a3b8',background:'#0c1211',border:'1px solid #23312d',borderRadius:999,padding:'5px 8px'}}>Last {monthlyTrend.length} observed months</span>
+                    </div>
+                    <ResponsiveContainer width="100%" height={230}>
+                      <LineChart data={monthlyTrend} margin={{top:8,right:12,left:-20,bottom:0}}>
+                        <CartesianGrid stroke="#23312d" strokeDasharray="3 3" vertical={false}/>
+                        <XAxis dataKey="month" tick={{fontSize:10,fill:'#64748b'}} axisLine={false} tickLine={false}/>
+                        <YAxis allowDecimals={false} tick={{fontSize:10,fill:'#64748b'}} axisLine={false} tickLine={false}/>
+                        <Tooltip contentStyle={{background:'#0c1211',border:'1px solid #33413d',borderRadius:8,fontSize:12}} labelStyle={{color:'#f8fafc'}}/>
+                        <Line type="monotone" dataKey="permits" name="Issued permits" stroke="#34d399" strokeWidth={2.5} dot={{r:3,fill:'#34d399',stroke:'#090d0c',strokeWidth:2}} activeDot={{r:5}}/>
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>}
                   <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.35fr) minmax(280px,.65fr)', gap: 20 }}>
                   {/* Trade volume chart */}
                   <div style={{ background: '#111827', border: '1px solid #1e293b',
