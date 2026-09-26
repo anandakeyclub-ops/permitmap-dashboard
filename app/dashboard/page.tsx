@@ -479,7 +479,11 @@ export default function Dashboard() {
     monthlyMap.set(key,row);
   });
   const monthlyTrend=Array.from(monthlyMap.entries()).sort((a,b)=>a[0].localeCompare(b[0])).slice(-12)
-    .map(entry=>({month:entry[1].month,permits:entry[1].permits,avgValue:entry[1].valued?Math.round(entry[1].value/entry[1].valued):null}));
+    .map(entry=>({month:entry[1].month,permits:entry[1].permits,avgValue:entry[1].valued?Math.round(entry[1].value/entry[1].valued):null,valued:entry[1].valued}));
+  const valuedMonths=monthlyTrend.filter(m=>m.avgValue!==null);
+  const valuedPermits=monthlyTrend.reduce((s,m)=>s+m.valued,0);
+  const observedPermits=monthlyTrend.reduce((s,m)=>s+m.permits,0);
+  const valuationCoverage=observedPermits>0?(valuedPermits/observedPermits)*100:0;
   // Entitlement-based lock (NOT list position × tier count): a county is locked iff the user
   // is not entitled to it. Fixes entitled counties (e.g. Marion) rendering locked and
   // non-entitled counties rendering available.
@@ -1100,6 +1104,22 @@ export default function Dashboard() {
                         <Line type="monotone" dataKey="permits" name="Issued permits" stroke="#34d399" strokeWidth={2.5} dot={{r:3,fill:'#34d399',stroke:'#090d0c',strokeWidth:2}} activeDot={{r:5}}/>
                       </LineChart>
                     </ResponsiveContainer>
+                  </div>}
+                  {valuedMonths.length >= 2 && <div style={{background:'#101816',border:'1px solid #23312d',borderRadius:12,padding:'20px 24px',marginBottom:20,boxShadow:'0 14px 34px rgba(0,0,0,.16)'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',gap:14,alignItems:'flex-start',flexWrap:'wrap',marginBottom:12}}>
+                      <div><h3 style={{margin:'0 0 4px',fontSize:13,fontWeight:800,color:'#f8fafc'}}>Average permitted project value</h3><span style={{fontSize:11,color:'#64748b'}}>Monthly average of permits with a reported positive valuation · not contractor revenue</span></div>
+                      <span style={{fontSize:10,color:valuationCoverage>=70?'#86efac':valuationCoverage>=40?'#fcd34d':'#fca5a5',background:'#0c1211',border:'1px solid #23312d',borderRadius:999,padding:'5px 8px'}}>{valuationCoverage.toFixed(0)}% valuation coverage · {valuedPermits}/{observedPermits} permits</span>
+                    </div>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <LineChart data={monthlyTrend} margin={{top:8,right:12,left:0,bottom:0}}>
+                        <CartesianGrid stroke="#23312d" strokeDasharray="3 3" vertical={false}/>
+                        <XAxis dataKey="month" tick={{fontSize:10,fill:'#64748b'}} axisLine={false} tickLine={false}/>
+                        <YAxis tickFormatter={(v)=>'$'+(v>=1000000?(v/1000000).toFixed(1)+'M':v>=1000?Math.round(v/1000)+'k':v)} tick={{fontSize:10,fill:'#64748b'}} axisLine={false} tickLine={false} width={55}/>
+                        <Tooltip formatter={(v:any)=>[typeof v==='number'?'$'+v.toLocaleString():'—','Avg permitted value']} contentStyle={{background:'#0c1211',border:'1px solid #33413d',borderRadius:8,fontSize:12}} labelStyle={{color:'#f8fafc'}}/>
+                        <Line connectNulls={false} type="monotone" dataKey="avgValue" name="Avg permitted value" stroke="#f59e0b" strokeWidth={2.5} dot={{r:3,fill:'#f59e0b',stroke:'#090d0c',strokeWidth:2}} activeDot={{r:5}}/>
+                      </LineChart>
+                    </ResponsiveContainer>
+                    {valuationCoverage<70 && <div style={{fontSize:10.5,color:'#64748b',lineHeight:1.45,marginTop:8}}>Interpret cautiously: not every permit reports valuation. Coverage shown above is for the displayed observed months.</div>}
                   </div>}
                   <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.35fr) minmax(280px,.65fr)', gap: 20 }}>
                   {/* Trade volume chart */}
