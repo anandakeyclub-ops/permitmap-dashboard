@@ -195,8 +195,8 @@ export default function SavedLeads({ getToken, onBrowse }:
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: 60, flexDirection: 'column', gap: 12 }}>
-        <span style={{ width: 32, height: 32, border: '3px solid #1e293b',
-          borderTop: '3px solid #3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        <span style={{ width: 32, height: 32, border: '3px solid #23312d',
+          borderTop: '3px solid #34d399', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
         <span style={{ color: '#475569', fontSize: 13 }}>Loading saved leads…</span>
       </div>
     );
@@ -205,7 +205,7 @@ export default function SavedLeads({ getToken, onBrowse }:
   if (locked) {
     return (
       <div style={{ padding: 40, textAlign: 'center', color: '#cbd5e1',
-        background: '#111827', border: '1px solid #f59e0b40', borderRadius: 12 }}>
+        background: '#101816', border: '1px solid #f59e0b40', borderRadius: 12 }}>
         Saved leads are a paid feature. Start a 14-day trial to track opportunities through your pipeline.
       </div>
     );
@@ -222,8 +222,8 @@ export default function SavedLeads({ getToken, onBrowse }:
 
   if (leads.length === 0) {
     return (
-      <div style={{ padding: 48, textAlign: 'center', background: '#111827',
-        border: '1px solid #1e293b', borderRadius: 12 }}>
+      <div style={{ padding: 48, textAlign: 'center', background: '#101816',
+        border: '1px solid #23312d', borderRadius: 12 }}>
         <Bookmark size={28} color="#475569" style={{ marginBottom: 12 }} />
         <p style={{ margin: '0 0 16px', color: '#94a3b8', fontSize: 14 }}>
           No saved leads yet. Save opportunities from Best Opportunities This Week.
@@ -246,7 +246,7 @@ export default function SavedLeads({ getToken, onBrowse }:
       display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 14px',
       borderRadius: 20, cursor: 'pointer', fontSize: 13, fontWeight: 600,
       textTransform: 'capitalize',
-      border: `1px solid ${active ? color : '#1e293b'}`,
+      border: `1px solid ${active ? color : '#23312d'}`,
       background: active ? `${color}20` : 'transparent',
       color: active ? color : '#94a3b8',
     }}>
@@ -265,15 +265,15 @@ export default function SavedLeads({ getToken, onBrowse }:
         }
       `}</style>
       <h2 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 700, color: '#f1f5f9', letterSpacing: '-0.02em' }}>
-        Saved Leads
+        Work Queue
       </h2>
       <p style={{ margin: '0 0 18px', fontSize: 13, color: '#64748b' }}>
-        {leads.length} saved {leads.length === 1 ? 'lead' : 'leads'} — track each through your pipeline.
+        {leads.length} active {leads.length === 1 ? 'lead' : 'leads'} — follow up, quote, and track outcomes without losing the next step.
       </p>
 
       {/* Pipeline summary — clickable status filters (client-side; no extra fetch) */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-        <Pill label="all" value={leads.length} active={filter === 'all'} color="#3b82f6"
+        <Pill label="all" value={leads.length} active={filter === 'all'} color="#34d399"
           onClick={() => setFilter('all')} />
         {STATUSES.map(s => (
           <Pill key={s} label={s} value={counts[s]} active={filter === s} color={STATUS_COLOR[s]}
@@ -284,7 +284,7 @@ export default function SavedLeads({ getToken, onBrowse }:
       <div className="pm-saved-table" style={{ background: '#111827', border: '1px solid #1e293b', borderRadius: 12, overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 920 }}>
           <thead>
-            <tr style={{ borderBottom: '1px solid #1e293b' }}>
+            <tr style={{ borderBottom: '1px solid #23312d' }}>
               {['Address', 'Trade', 'Permit Value', 'Quote / Won $', 'Permit Date', 'Score', 'Status', 'Follow up', 'Notes', ''].map(h => (
                 <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 11,
                   color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
@@ -295,8 +295,8 @@ export default function SavedLeads({ getToken, onBrowse }:
             {visible.map((l, i) => {
               const busy = pending.has(l.id);
               return (
-                <tr key={l.id} style={{ borderBottom: '1px solid #0f172a',
-                  background: i % 2 === 0 ? '#111827' : '#0d1529', opacity: busy ? 0.6 : 1 }}>
+                <tr key={l.id} style={{ borderBottom: '1px solid #23312d',
+                  background: i % 2 === 0 ? '#101816' : '#0c1211', opacity: busy ? 0.6 : 1 }}>
                   <td style={{ padding: '12px 16px', fontSize: 13, color: '#e2e8f0', maxWidth: 240,
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {l.address || '—'}
@@ -342,7 +342,7 @@ export default function SavedLeads({ getToken, onBrowse }:
                   <td style={{ padding: '12px 16px', minWidth: 145 }}>
                     <input type="date" value={followUpDate(l)} aria-label={`Follow up for ${l.address || l.county}`}
                       onChange={e => { setFollowUpDrafts(d => ({...d,[l.id]:e.target.value})); saveFollowUp(l,e.target.value); }}
-                      style={{ background:'#0f172a',color:'#e2e8f0',border:'1px solid #334155',borderRadius:5,padding:'5px 6px',fontSize:12 }} />
+                      style={{ background:'#090d0c',color:'#e2e8f0',border:'1px solid #33413d',borderRadius:5,padding:'5px 6px',fontSize:12 }} />
                     {followUpState(l) && <div style={{ marginTop:4,fontSize:10,fontWeight:700,color:followUpState(l)==='Overdue'?'#f87171':'#facc15' }}>{followUpState(l)}</div>}
                   </td>
                   <td style={{ padding: '12px 16px', minWidth: 190 }}>
@@ -353,8 +353,8 @@ export default function SavedLeads({ getToken, onBrowse }:
                       aria-label={`Notes for ${l.address || l.county}`}
                       onChange={e => setNoteDrafts(d => ({ ...d, [l.id]: e.target.value }))}
                       onBlur={e => saveNotes(l, e.target.value)}
-                      style={{ width: '100%', minWidth: 160, boxSizing: 'border-box', background: '#0f172a',
-                        color: '#e2e8f0', border: '1px solid #334155', borderRadius: 5, padding: '5px 7px', fontSize: 12 }} />
+                      style={{ width: '100%', minWidth: 160, boxSizing: 'border-box', background: '#090d0c',
+                        color: '#e2e8f0', border: '1px solid #33413d', borderRadius: 5, padding: '5px 7px', fontSize: 12 }} />
                   </td>
                   <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                     {confirmingId === l.id ? (
