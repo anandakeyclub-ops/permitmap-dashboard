@@ -40,8 +40,8 @@ function StatusPill({ status }: { status: SavedLeadStatus }) {
   );
 }
 
-export default function SavedLeads({ getToken, onBrowse }:
-  { getToken: GetToken; onBrowse?: () => void }) {
+export default function SavedLeads({ getToken, onBrowse, monthlyPrice }:
+  { getToken: GetToken; onBrowse?: () => void; monthlyPrice?: number }) {
 
   const [leads, setLeads]         = useState<SavedLead[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -96,8 +96,11 @@ export default function SavedLeads({ getToken, onBrowse }:
     const avgScore = scored.length
       ? Math.round(scored.reduce((s, l) => s + (l.score as number), 0) / scored.length)
       : null;
-    return { count: won.length, value, wonRevenue, quotedPipeline, worked, avgScore };
-  }, [leads]);
+    const quotedCount = leads.filter(l => l.status === 'quoted' || l.status === 'won').length;
+    const conversionRate = worked > 0 ? (won.length / worked) * 100 : null;
+    const revenueMultiple = monthlyPrice && monthlyPrice > 0 && wonRevenue > 0 ? wonRevenue / monthlyPrice : null;
+    return { count: won.length, value, wonRevenue, quotedPipeline, worked, avgScore, quotedCount, conversionRate, revenueMultiple };
+  }, [leads, monthlyPrice]);
 
   // Execution-first ordering: unresolved follow-ups first, then strongest scored leads.
   // Closed outcomes stay available through status filters but never crowd out today's work.
@@ -474,16 +477,25 @@ export default function SavedLeads({ getToken, onBrowse }:
         ))}
       </div>
 
-      {/* Contractor-entered ROI: permit value remains separate and is never presented as revenue. */}
+      {/* Contractor-entered ROI only. Permit valuation is intentionally excluded from revenue/ROI. */}
       {(wins.worked > 0 || wins.quotedPipeline > 0 || wins.wonRevenue > 0) && (
         <div style={{ marginTop: 18, background: '#111827', border: '1px solid #2563eb50', borderRadius: 12, padding: '18px 22px' }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', marginBottom: 12 }}>Your PermitMap Pipeline</div>
-          <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
-            <div><div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Worked now</div><strong>{wins.worked}</strong></div>
-            <div><div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Quoted now</div><strong>{counts.quoted}</strong></div>
-            <div><div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Won now</div><strong>{wins.count}</strong></div>
-            <div><div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Quoted pipeline</div><strong>{fmtVal(wins.quotedPipeline)}</strong></div>
-            <div><div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Won revenue</div><strong>{fmtVal(wins.wonRevenue)}</strong></div>
+          <div style={{display:'flex',justifyContent:'space-between',gap:12,alignItems:'flex-start',flexWrap:'wrap',marginBottom:12}}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9' }}>PermitMap ROI</div>
+              <div style={{fontSize:11,color:'#64748b',marginTop:3}}>Based only on contractor-entered quote and won revenue. Permit valuation is not revenue.</div>
+            </div>
+            {wins.revenueMultiple !== null && <div style={{padding:'6px 10px',borderRadius:999,background:'rgba(34,197,94,.10)',border:'1px solid #22c55e44',fontSize:12,color:'#86efac',fontWeight:800}}>
+              {wins.revenueMultiple.toFixed(1)}× monthly subscription revenue multiple
+            </div>}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap: 12 }}>
+            <div><div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Leads worked</div><strong>{wins.worked}</strong></div>
+            <div><div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Reached quote/won</div><strong>{wins.quotedCount}</strong></div>
+            <div><div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Jobs won</div><strong>{wins.count}</strong></div>
+            <div><div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Worked → won</div><strong>{wins.conversionRate === null ? '—' : `${wins.conversionRate.toFixed(0)}%`}</strong></div>
+            <div><div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Open quoted pipeline</div><strong>{fmtVal(wins.quotedPipeline)}</strong></div>
+            <div><div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase' }}>Won revenue</div><strong style={{color:wins.wonRevenue>0?'#86efac':'inherit'}}>{fmtVal(wins.wonRevenue)}</strong></div>
           </div>
         </div>
       )}

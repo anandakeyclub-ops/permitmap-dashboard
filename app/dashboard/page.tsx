@@ -1266,7 +1266,8 @@ export default function Dashboard() {
                 <PreviewLock compact />
               )}
               {activeTab === 'saved' && !isPreview && (
-                <SavedLeads getToken={getToken} onBrowse={() => setActiveTab('opportunities')} />
+                <SavedLeads getToken={getToken} onBrowse={() => setActiveTab('opportunities')}
+                  monthlyPrice={tier === 'starter' ? 79 : tier === 'pro' ? 149 : tier === 'team' ? 299 : undefined} />
               )}
             </>
           )}
