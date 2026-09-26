@@ -215,13 +215,17 @@ export default function Dashboard() {
     dismissFirstLogin().catch(() => {});
   };
 
-  // Load counties
+  // County taxonomy is public product configuration. Never attach the Clerk token here:
+  // production auth rejects that token at this public route, which strands the selector empty.
   useEffect(() => {
-    apiFetch('/counties', getToken)
-      .then(r => r.json())
+    apiFetch('/counties')
+      .then(r => {
+        if (!r.ok) throw new Error(`counties_${r.status}`);
+        return r.json();
+      })
       .then(d => setCounties(d.counties || []))
-      .catch(() => {});
-  }, [getToken]);
+      .catch(() => setCounties([]));
+  }, []);
 
   // Resolve the initial county once (PART A/B): a prior choice (localStorage) wins,
   // else the county from Clerk publicMetadata; for a brand-new signup the county was
