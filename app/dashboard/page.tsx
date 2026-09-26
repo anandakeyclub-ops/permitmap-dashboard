@@ -783,6 +783,7 @@ export default function Dashboard() {
                     scored={scored}
                     topZips={(summary?.targeting?.top_zips || []).map((z: any) => String(z.zip))}
                     getToken={getToken}
+                    fixedTrade={primaryTrade || undefined}
                   />
                 </div>
               )}
