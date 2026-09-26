@@ -126,6 +126,11 @@ export default function SavedLeads({ getToken, onBrowse }:
       const result = await updateSavedLead(getToken, lead.id, next);
       setLeads(ls => ls.map(l => l.id === lead.id ? result.lead : l));
       const ev=leadStatusChangedEvent(prevLead.status,next); track(getToken,ev.event,ev.props);
+      // Enterprise next-action guardrails: status changes should expose the missing commercial
+      // action immediately, without inventing dates or dollar amounts on the contractor's behalf.
+      if (next === 'called' && !result.lead.follow_up_at) notify('Called saved — schedule the next follow-up so this lead does not go cold.');
+      else if (next === 'quoted' && !result.lead.quoted_amount) notify('Quoted saved — enter the quote amount to track pipeline value.');
+      else if (next === 'won' && !result.lead.won_amount) notify('Won saved — enter won revenue to measure PermitMap ROI.');
     } catch {
       setLeads(ls => ls.map(l => l.id === lead.id ? prevLead : l)); // revert full row
       notify('Failed to update status — try again');
@@ -373,6 +378,9 @@ export default function SavedLeads({ getToken, onBrowse }:
                       }}>
                       {STATUSES.map(s => <option key={s} value={s} style={{ background: '#0d1529', color: '#e2e8f0' }}>{s}</option>)}
                     </select>
+                    {l.status === 'called' && !l.follow_up_at && <div style={{marginTop:5,fontSize:10,color:'#fcd34d',fontWeight:700}}>Next: schedule follow-up</div>}
+                    {l.status === 'quoted' && !l.quoted_amount && <div style={{marginTop:5,fontSize:10,color:'#fcd34d',fontWeight:700}}>Next: enter quote $</div>}
+                    {l.status === 'won' && !l.won_amount && <div style={{marginTop:5,fontSize:10,color:'#86efac',fontWeight:700}}>Next: enter won $</div>}
                   </td>
                   <td style={{ padding: '12px 16px', minWidth: 145 }}>
                     <input type="date" value={followUpDate(l)} aria-label={`Follow up for ${l.address || l.county}`}
