@@ -447,12 +447,25 @@ export default function Dashboard() {
   };
 
   const tradeChartData = summary?.trade_breakdown
-    ? Object.entries(summary.trade_breakdown).map(([trade, count]) => ({
-        trade: trade.replace('_', ' '),
-        count: count as number,
-        fill: TRADE_COLORS[trade] || '#6b7280',
-      }))
+    ? Object.entries(summary.trade_breakdown)
+        .map(([trade, count]) => ({
+          trade: trade.replace('_', ' '),
+          count: Number(count) || 0,
+          fill: TRADE_COLORS[trade] || '#6b7280',
+        }))
+        .sort((a, b) => b.count - a.count)
     : [];
+  // Historical intelligence derived only from the currently authorized permit rows. We do not
+  // claim a comparison when either adjacent 30-day window is incomplete or absent.
+  const permitDate = (p: any) => {
+    const raw = p.LAST_ISSUED_DATE ?? p.last_issued_date ?? p.ISSUED_DATE ?? p.issued_date;
+    const d = raw ? new Date(raw) : null;
+    return d && !Number.isNaN(d.getTime()) ? d : null;
+  };
+  const nowMs = Date.now(), dayMs = 86400000;
+  const recent30 = permits.filter(p => { const d=permitDate(p); return d && nowMs-d.getTime() >= 0 && nowMs-d.getTime() < 30*dayMs; }).length;
+  const prior30 = permits.filter(p => { const d=permitDate(p); return d && nowMs-d.getTime() >= 30*dayMs && nowMs-d.getTime() < 60*dayMs; }).length;
+  const volumeDelta = prior30 > 0 ? ((recent30-prior30)/prior30)*100 : null;
 
   // Entitlement-based lock (NOT list position × tier count): a county is locked iff the user
   // is not entitled to it. Fixes entitled counties (e.g. Marion) rendering locked and
@@ -1054,6 +1067,11 @@ export default function Dashboard() {
                     <div style={{ fontSize:11, fontWeight:800, color:'#34d399', textTransform:'uppercase', letterSpacing:'.1em', marginBottom:5 }}>Market intelligence</div>
                     <h2 style={{ margin:'0 0 6px', fontSize:20, color:'#f8fafc', letterSpacing:'-.02em' }}>Where demand is concentrated</h2>
                     <p style={{ margin:0, fontSize:13, color:'#94a3b8', lineHeight:1.5 }}>Use current permit volume to decide which trades and ZIP codes deserve attention. These are live counts for the selected market—not forecasts.</p>
+                    {(recent30 > 0 || prior30 > 0) && <div style={{display:'flex',gap:10,flexWrap:'wrap',marginTop:12}}>
+                      <span style={{padding:'6px 9px',borderRadius:999,background:'#101816',border:'1px solid #23312d',fontSize:11,color:'#cbd5e1'}}><strong style={{color:'#f8fafc'}}>{recent30}</strong> issued last 30 days</span>
+                      <span style={{padding:'6px 9px',borderRadius:999,background:'#101816',border:'1px solid #23312d',fontSize:11,color:'#cbd5e1'}}><strong style={{color:'#f8fafc'}}>{prior30}</strong> prior 30 days</span>
+                      {volumeDelta !== null && <span style={{padding:'6px 9px',borderRadius:999,background:volumeDelta>=0?'rgba(34,197,94,.10)':'rgba(245,158,11,.10)',border:`1px solid ${volumeDelta>=0?'#22c55e40':'#f59e0b40'}`,fontSize:11,color:volumeDelta>=0?'#86efac':'#fcd34d'}}><strong>{volumeDelta>=0?'+':''}{volumeDelta.toFixed(0)}%</strong> permit volume vs prior period</span>}
+                    </div>}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.35fr) minmax(280px,.65fr)', gap: 20 }}>
                   {/* Trade volume chart */}
