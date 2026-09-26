@@ -4,7 +4,7 @@ import { CalendarClock, Target, DollarSign, ArrowRight, AlertTriangle, CheckCirc
 import { getSavedLeads, type GetToken } from '../../../lib/api';
 import type { SavedLead } from '../../../lib/types';
 
-export default function TodayCommandCenter({getToken,scoredCount,onOpportunities,onSaved}:{getToken:GetToken;scoredCount:number;onOpportunities:()=>void;onSaved:()=>void}) {
+export default function TodayCommandCenter({getToken,scoredCount,tradeLabel,marketLabel,onOpportunities,onSaved}:{getToken:GetToken;scoredCount:number;tradeLabel?:string;marketLabel?:string;onOpportunities:()=>void;onSaved:()=>void}) {
  const [leads,setLeads]=useState<SavedLead[]>([]);
  useEffect(()=>{let dead=false;getSavedLeads(getToken).then(d=>{if(!dead)setLeads(d.leads||[])}).catch(()=>{});return()=>{dead=true}},[getToken]);
  const x=useMemo(()=>{const now=new Date(),start=new Date(now);start.setHours(0,0,0,0);const end=new Date(start);end.setDate(end.getDate()+1);
@@ -16,8 +16,9 @@ export default function TodayCommandCenter({getToken,scoredCount,onOpportunities
   return {overdue,due,quotes:quotes.length,quoteValue,won,open:open.length};},[leads]);
  const money=(n:number)=>'$'+n.toLocaleString(undefined,{maximumFractionDigits:0});
  const urgent=x.overdue+x.due;
- const headline=urgent>0?`${urgent} follow-up${urgent===1?'':'s'} need attention`:scoredCount>0?`${scoredCount} ranked opportunities ready to review`:'Your work queue is clear';
- const sub=urgent>0?'Protect the leads you already earned before chasing the next one.':scoredCount>0?'Start with the highest-ranked permit and work down the queue.':'PermitMap will surface the next actions as new permits and follow-ups arrive.';
+ const lens=tradeLabel&&marketLabel?`${tradeLabel.replace(/\b\w/g,c=>c.toUpperCase())} · ${marketLabel}`:marketLabel||'';
+ const headline=urgent>0?`${urgent} follow-up${urgent===1?'':'s'} need attention`:scoredCount>0?`${scoredCount} ranked opportunities ready to review`:'No qualifying opportunities in the current lens';
+ const sub=urgent>0?'Protect the leads you already earned before chasing the next one.':scoredCount>0?`Ranked for ${lens||'your selected market'} — start with the highest-scoring permit.`:`${lens||'Your selected market'} has no permits meeting the current opportunity threshold. Market Intelligence still shows the broader county.`;
  return <section aria-label="Today command center" style={{background:'linear-gradient(135deg,rgba(52,211,153,.09),#101816 62%)',border:'1px solid #34d39940',borderRadius:14,padding:'20px 22px',marginBottom:24,boxShadow:'0 14px 34px rgba(0,0,0,.18)'}}>
   <div style={{display:'flex',justifyContent:'space-between',gap:18,alignItems:'flex-start',flexWrap:'wrap',marginBottom:16}}>
    <div style={{maxWidth:650}}><div style={{fontSize:10,fontWeight:850,color:'#34d399',textTransform:'uppercase',letterSpacing:'.12em',marginBottom:5}}>Today · contractor command center</div><strong style={{display:'block',fontSize:21,color:'#f8fafc',letterSpacing:'-.02em',marginBottom:5}}>{headline}</strong><span style={{fontSize:13,color:'#94a3b8',lineHeight:1.5}}>{sub}</span></div>
@@ -26,7 +27,7 @@ export default function TodayCommandCenter({getToken,scoredCount,onOpportunities
   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(155px,1fr))',gap:10}}>
    <Metric icon={x.overdue>0?AlertTriangle:CheckCircle2} value={String(x.overdue)} label="Overdue follow-ups" hot={x.overdue>0} onClick={onSaved}/>
    <Metric icon={CalendarClock} value={String(x.due)} label="Due today" hot={x.due>0} onClick={onSaved}/>
-   <Metric icon={Target} value={String(scoredCount)} label="Ranked opportunities" onClick={onOpportunities}/>
+   <Metric icon={Target} value={String(scoredCount)} label={tradeLabel?`${tradeLabel.replace(/\b\w/g,c=>c.toUpperCase())} opportunities`:'Ranked opportunities'} onClick={onOpportunities}/>
    <Metric icon={DollarSign} value={String(x.quotes)} label={`Open quotes · ${money(x.quoteValue)}`} onClick={onSaved}/>
    <Metric icon={DollarSign} value={money(x.won)} label="Won revenue tracked" positive={x.won>0} onClick={onSaved}/>
   </div>
