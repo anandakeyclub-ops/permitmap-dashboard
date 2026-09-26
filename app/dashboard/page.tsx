@@ -701,9 +701,9 @@ export default function Dashboard() {
                   display: 'flex', alignItems: 'center', gap: 12,
                   marginBottom: 28,
                 }}>
-                  <Target size={20} color="#3b82f6" style={{ flexShrink: 0 }} />
+                  <Target size={20} color="#34d399" style={{ flexShrink: 0 }} />
                   <div>
-                    <div style={{ fontSize: 11, color: '#60a5fa', fontWeight: 600,
+                    <div style={{ fontSize: 11, color: '#6ee7b7', fontWeight: 600,
                       textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
                       Smart Targeting
                     </div>
@@ -722,7 +722,7 @@ export default function Dashboard() {
                     padding: '8px 18px', background: 'none', border: 'none',
                     cursor: 'pointer', fontSize: 13, fontWeight: 600,
                     color: activeTab === tab ? '#3b82f6' : '#475569',
-                    borderBottom: activeTab === tab ? '2px solid #3b82f6' : '2px solid transparent',
+                    borderBottom: activeTab === tab ? '2px solid #34d399' : '2px solid transparent',
                     textTransform: 'capitalize', marginBottom: -1,
                   }}>{tab}</button>
                 ))}
@@ -754,7 +754,7 @@ export default function Dashboard() {
                       <button key={t} onClick={() => setTradeFilter(t)} style={{
                         padding: '5px 12px', borderRadius: 20,
                         border: `1px solid ${tradeFilter === t ? (TRADE_COLORS[t] || '#3b82f6') : '#1e293b'}`,
-                        background: tradeFilter === t ? `${TRADE_COLORS[t] || '#2563eb'}20` : 'transparent',
+                        background: tradeFilter === t ? `${TRADE_COLORS[t] || '#34d399'}20` : 'transparent',
                         color: tradeFilter === t ? (TRADE_COLORS[t] || '#3b82f6') : '#64748b',
                         fontSize: 12, fontWeight: 600, cursor: 'pointer',
                         textTransform: 'capitalize',
