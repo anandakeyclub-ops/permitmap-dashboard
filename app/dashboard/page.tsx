@@ -695,8 +695,8 @@ export default function Dashboard() {
               {/* Smart targeting */}
               {summary.targeting?.recommendation && (
                 <div style={{
-                  background: 'linear-gradient(135deg, #1e3a5f 0%, #1e293b 100%)',
-                  border: '1px solid #2563eb40',
+                  background: 'linear-gradient(135deg, rgba(52,211,153,.10) 0%, #101816 100%)',
+                  border: '1px solid #34d39940',
                   borderRadius: 12, padding: '16px 20px',
                   display: 'flex', alignItems: 'center', gap: 12,
                   marginBottom: 28,

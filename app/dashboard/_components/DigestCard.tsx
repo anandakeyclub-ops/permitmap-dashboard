@@ -43,7 +43,7 @@ function parseBriefing(bp: string) {
 function Highlight({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-      <Icon size={16} color="#60a5fa" style={{ flexShrink: 0 }} />
+      <Icon size={16} color="#34d399" style={{ flexShrink: 0 }} />
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>{label}</div>
         <div style={{ fontSize: 14, color: '#e2e8f0', fontWeight: 600, textTransform: 'capitalize',
@@ -78,11 +78,11 @@ export default function DigestCard({ digest, label, county, onView }:
     return (
       <button onClick={() => setDismissed(false)} style={{
         display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-        background: '#0d1529', border: '1px solid #1e293b', borderRadius: 10,
+        background: '#0c1211', border: '1px solid #23312d', borderRadius: 10,
         padding: '10px 16px', cursor: 'pointer', color: '#64748b', fontSize: 13,
         marginBottom: 20, textAlign: 'left',
       }}>
-        <ClipboardList size={14} color="#60a5fa" />
+        <ClipboardList size={14} color="#34d399" />
         Weekly briefing — {total.toLocaleString()} permits this week
         <ChevronRight size={14} style={{ marginLeft: 'auto' }} />
       </button>
@@ -92,13 +92,13 @@ export default function DigestCard({ digest, label, county, onView }:
   return (
     <div style={{
       background: 'linear-gradient(135deg, rgba(52,211,153,.12) 0%, #0c1211 100%)',
-      border: '1px solid #2563eb55', borderRadius: 14, padding: '20px 24px', marginBottom: 24,
+      border: '1px solid #34d39955', borderRadius: 14, padding: '20px 24px', marginBottom: 24,
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <ClipboardList size={20} color="#34d399" />
           <div>
-            <div style={{ fontSize: 11, color: '#60a5fa', fontWeight: 700,
+            <div style={{ fontSize: 11, color: '#6ee7b7', fontWeight: 700,
               textTransform: 'uppercase', letterSpacing: '0.08em' }}>Your 60-second briefing</div>
             <h2 style={{ margin: '2px 0 0', fontSize: 18, fontWeight: 700, color: '#f1f5f9', letterSpacing: '-0.02em' }}>
               {title}
@@ -130,7 +130,7 @@ export default function DigestCard({ digest, label, county, onView }:
       {/* Top project */}
       {top && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
-          background: '#0d152980', border: '1px solid #1e293b', borderRadius: 10, marginBottom: 18 }}>
+          background: '#0c1211', border: '1px solid #23312d', borderRadius: 10, marginBottom: 18 }}>
           <Building2 size={16} color="#22c55e" style={{ flexShrink: 0 }} />
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 10, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>Top project</div>
