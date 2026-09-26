@@ -120,8 +120,8 @@ function SaveStar({ saved, saving, onClick }: { saved: boolean; saving: boolean;
   );
 }
 
-export default function CallList({ scored, topZips, getToken }:
-  { scored: any[]; topZips: string[]; getToken: GetToken }) {
+export default function CallList({ scored, topZips, getToken, fixedTrade }:
+  { scored: any[]; topZips: string[]; getToken: GetToken; fixedTrade?: string }) {
   const [tradeFilter, setTradeFilter] = useState('');
   const hotZips = new Set((topZips || []).map(z => String(z).trim()));
 
@@ -173,7 +173,7 @@ export default function CallList({ scored, topZips, getToken }:
     return { saved: savedIds.has(pno), saving: savingIds.has(pno), onClick: () => handleSave(p) };
   };
 
-  const list = (scored || []).filter(p => !tradeFilter || (p.trade || '').toLowerCase() === tradeFilter);
+  const list = (scored || []).filter(p => fixedTrade || !tradeFilter || (p.trade || '').toLowerCase() === tradeFilter);
   const hero = list[0];
   const rest = list.slice(1);
 
@@ -197,23 +197,34 @@ export default function CallList({ scored, topZips, getToken }:
         </div>
       )}
 
-      {/* Trade filter */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
-        {['', 'roofing', 'hvac', 'electrical', 'plumbing', 'pool', 'solar', 'general_contractor'].map(t => (
-          <button key={t} onClick={() => setTradeFilter(t)} style={{
-            padding: '5px 12px', borderRadius: 20,
-            border: `1px solid ${tradeFilter === t ? (TRADE_COLORS[t] || '#34d399') : '#23312d'}`,
-            background: tradeFilter === t ? `${TRADE_COLORS[t] || '#34d399'}20` : 'transparent',
-            color: tradeFilter === t ? (TRADE_COLORS[t] || '#34d399') : '#64748b',
-            fontSize: 12, fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize',
-          }}>{t ? t.replace('_', ' ') : 'All Trades'}</button>
-        ))}
-      </div>
+      {/* The Opportunity Queue is already server-filtered to the onboarding trade. Do not offer
+          filters that imply other trades are present; Permit Search is the cross-trade exploration surface. */}
+      {fixedTrade ? (
+        <div style={{ display:'inline-flex', alignItems:'center', gap:7, marginBottom:18, padding:'6px 10px',
+          borderRadius:999, background:`${TRADE_COLORS[fixedTrade] || '#34d399'}18`,
+          border:`1px solid ${TRADE_COLORS[fixedTrade] || '#34d399'}55`, color:'#cbd5e1',
+          fontSize:12, fontWeight:700, textTransform:'capitalize' }}>
+          <Target size={13} color={TRADE_COLORS[fixedTrade] || '#34d399'} />
+          {fixedTrade.replace('_',' ')} pursuit queue
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
+          {['', 'roofing', 'hvac', 'electrical', 'plumbing', 'pool', 'solar', 'general_contractor'].map(t => (
+            <button key={t} onClick={() => setTradeFilter(t)} style={{
+              padding: '5px 12px', borderRadius: 20,
+              border: `1px solid ${tradeFilter === t ? (TRADE_COLORS[t] || '#34d399') : '#23312d'}`,
+              background: tradeFilter === t ? `${TRADE_COLORS[t] || '#34d399'}20` : 'transparent',
+              color: tradeFilter === t ? (TRADE_COLORS[t] || '#34d399') : '#64748b',
+              fontSize: 12, fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize',
+            }}>{t ? t.replace('_', ' ') : 'All Trades'}</button>
+          ))}
+        </div>
+      )}
 
       {!hero ? (
         <div style={{ padding: 48, textAlign: 'center', color: '#475569',
           background: '#111827', border: '1px solid #1e293b', borderRadius: 12 }}>
-          No scored opportunities for this {tradeFilter ? 'trade' : 'county'} this week.
+          No scored opportunities for this {fixedTrade ? fixedTrade.replace('_',' ') : tradeFilter ? 'trade' : 'county'} this week.
         </div>
       ) : (
         <>
