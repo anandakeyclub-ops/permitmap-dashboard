@@ -641,6 +641,11 @@ export default function Dashboard() {
                   subscriber to the first actions that correlate with realized value. Read failures
                   degrade silently; permit data and the existing dashboard remain untouched. */}
               {!isPreview && (
+                <TodayCommandCenter getToken={getToken} scoredCount={scored.length}
+                  onOpportunities={goToQueue} onSaved={() => setActiveTab('saved')} />
+              )}
+
+              {!isPreview && (
                 <SubscriberValueCard
                   getToken={getToken}
                   tier={tier}
@@ -649,11 +654,6 @@ export default function Dashboard() {
                   onPermits={() => setActiveTab('permits')}
                   onSaved={() => setActiveTab('saved')}
                 />
-              )}
-
-              {!isPreview && (
-                <TodayCommandCenter getToken={getToken} scoredCount={scored.length}
-                  onOpportunities={goToQueue} onSaved={() => setActiveTab('saved')} />
               )}
 
               {/* Phase B: Weekly Digest Card — 60-second briefing, above the Opportunity Queue.
