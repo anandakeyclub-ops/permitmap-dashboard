@@ -99,7 +99,23 @@ export default function SavedLeads({ getToken, onBrowse }:
     return { count: won.length, value, wonRevenue, quotedPipeline, worked, avgScore };
   }, [leads]);
 
-  const visible = filter === 'all' ? leads : leads.filter(l => l.status === filter);
+  // Execution-first ordering: unresolved follow-ups first, then strongest scored leads.
+  // Closed outcomes stay available through status filters but never crowd out today's work.
+  const priorityTime = (l: SavedLead) => l.follow_up_at ? new Date(l.follow_up_at).getTime() : Number.POSITIVE_INFINITY;
+  const visible = (filter === 'all' ? leads : leads.filter(l => l.status === filter)).slice().sort((a,b) => {
+    const aOpen = a.status !== 'won' && a.status !== 'lost';
+    const bOpen = b.status !== 'won' && b.status !== 'lost';
+    if (aOpen !== bOpen) return aOpen ? -1 : 1;
+    const at = priorityTime(a), bt = priorityTime(b);
+    if (at !== bt) return at - bt;
+    return (b.score ?? -1) - (a.score ?? -1);
+  });
+  const today = new Date(); today.setHours(0,0,0,0);
+  const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate()+1);
+  const openLeads = leads.filter(l => l.status !== 'won' && l.status !== 'lost');
+  const overdueCount = openLeads.filter(l => l.follow_up_at && new Date(l.follow_up_at) < today).length;
+  const dueTodayCount = openLeads.filter(l => l.follow_up_at && new Date(l.follow_up_at) >= today && new Date(l.follow_up_at) < tomorrow).length;
+  const unscheduledCount = openLeads.filter(l => !l.follow_up_at).length;
 
   const changeStatus = async (lead: SavedLead, next: SavedLeadStatus) => {
     if (next === lead.status || pending.has(lead.id)) return;
@@ -273,8 +289,22 @@ export default function SavedLeads({ getToken, onBrowse }:
         Work Queue
       </h2>
       <p style={{ margin: '0 0 18px', fontSize: 13, color: '#64748b' }}>
-        {leads.length} active {leads.length === 1 ? 'lead' : 'leads'} — follow up, quote, and track outcomes without losing the next step.
+        {openLeads.length} open {openLeads.length === 1 ? 'lead' : 'leads'} · {leads.length} total — ordered by follow-up urgency, then opportunity score.
       </p>
+
+      {/* Execution health: surface work that can leak revenue before pipeline taxonomy. */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(155px,1fr))',gap:10,marginBottom:18}}>
+        {[
+          {label:'Overdue follow-ups',value:overdueCount,hot:overdueCount>0},
+          {label:'Due today',value:dueTodayCount,hot:dueTodayCount>0},
+          {label:'Open · no follow-up',value:unscheduledCount,hot:unscheduledCount>0},
+          {label:'Quoted pipeline',value:fmtVal(wins.quotedPipeline),hot:false},
+          {label:'Won revenue',value:fmtVal(wins.wonRevenue),hot:false},
+        ].map(m => <div key={m.label} style={{background:'#0c1211',border:`1px solid ${m.hot?'#f59e0b55':'#23312d'}`,borderRadius:10,padding:'12px 14px'}}>
+          <strong style={{display:'block',fontSize:20,color:m.hot?'#fcd34d':'#f8fafc',marginBottom:3}}>{m.value}</strong>
+          <span style={{fontSize:11,color:'#64748b'}}>{m.label}</span>
+        </div>)}
+      </div>
 
       {/* Pipeline summary — clickable status filters (client-side; no extra fetch) */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
