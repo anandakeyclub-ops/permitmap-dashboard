@@ -31,8 +31,9 @@ export async function saveOnboardingSelections(input: { counties: string[]; trad
   // here but the tier LIMIT + non-empty checks still apply.
   let supported: string[] = [];
   try {
-    const token = await getToken();
-    const res = await fetch(`${API_URL}/counties`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    // County taxonomy is public; attaching a Clerk token can make the API auth layer reject it.
+    const res = await fetch(`${API_URL}/counties`);
+    if (!res.ok) throw new Error(`counties_${res.status}`);
     const data = await res.json();
     supported = (data?.counties || []).map((c: any) => c.key).filter(Boolean);
   } catch { /* leave supported empty → membership check skipped, limit/count still enforced */ }
