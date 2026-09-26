@@ -77,10 +77,10 @@ function ReasonChip({ r }: { r: Reason }) {
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 6,
-      background: '#0d1529', border: '1px solid #1e293b', borderRadius: 20,
+      background: '#0c1211', border: '1px solid #23312d', borderRadius: 20,
       padding: '4px 10px', fontSize: 12, color: '#cbd5e1', textTransform: 'capitalize',
     }}>
-      <Icon size={12} color="#60a5fa" />
+      <Icon size={12} color="#34d399" />
       {r.label}{r.sub ? <span style={{ color: '#64748b' }}>· {r.sub}</span> : null}
     </span>
   );
@@ -187,8 +187,8 @@ export default function CallList({ scored, topZips, getToken }:
         </h2>
       </div>
       <p style={{ margin: '0 0 10px', fontSize: 13, color: '#64748b' }}>
-        {list.length} scored {list.length === 1 ? 'opportunity' : 'opportunities'}, ranked by priority —
-        start at the top.
+        {list.length} scored {list.length === 1 ? 'opportunity' : 'opportunities'}, ranked by priority — start at the top.
+        <span title="Priority score combines existing permit value, recency, trade-demand weighting and available market signals. It is a pursuit-priority indicator, not a probability of winning the job." style={{marginLeft:8,color:'#34d399',cursor:'help',fontWeight:700}}>How scoring works ⓘ</span>
       </p>
       {savedIds.size === 0 && list.length > 0 && (
         <div style={{ marginBottom: 18, padding: '10px 14px', borderRadius: 10,
@@ -202,9 +202,9 @@ export default function CallList({ scored, topZips, getToken }:
         {['', 'roofing', 'hvac', 'electrical', 'plumbing', 'pool', 'solar', 'general_contractor'].map(t => (
           <button key={t} onClick={() => setTradeFilter(t)} style={{
             padding: '5px 12px', borderRadius: 20,
-            border: `1px solid ${tradeFilter === t ? (TRADE_COLORS[t] || '#3b82f6') : '#1e293b'}`,
+            border: `1px solid ${tradeFilter === t ? (TRADE_COLORS[t] || '#34d399') : '#23312d'}`,
             background: tradeFilter === t ? `${TRADE_COLORS[t] || '#34d399'}20` : 'transparent',
-            color: tradeFilter === t ? (TRADE_COLORS[t] || '#3b82f6') : '#64748b',
+            color: tradeFilter === t ? (TRADE_COLORS[t] || '#34d399') : '#64748b',
             fontSize: 12, fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize',
           }}>{t ? t.replace('_', ' ') : 'All Trades'}</button>
         ))}
@@ -219,7 +219,7 @@ export default function CallList({ scored, topZips, getToken }:
         <>
           {/* HERO — Call first */}
           <div style={{
-            background: 'linear-gradient(135deg, #14532d20 0%, #0d1529 100%)',
+            background: 'linear-gradient(135deg, rgba(52,211,153,.10) 0%, #0c1211 100%)',
             border: '1px solid #22c55e55', borderRadius: 14, padding: '22px 26px', marginBottom: 20,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -228,7 +228,7 @@ export default function CallList({ scored, topZips, getToken }:
                 textTransform: 'uppercase', letterSpacing: '0.1em' }}>★ Pursue first</span>
               <SaveStar {...starProps(hero)} />
             </div>
-            <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+            <div className="pm-opportunity-hero" style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
               <ScoreBadge score={hero.score} size={56} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 19, fontWeight: 700, color: '#f1f5f9', marginBottom: 4 }}>
