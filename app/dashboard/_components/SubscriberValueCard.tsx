@@ -60,7 +60,7 @@ export default function SubscriberValueCard({
 
   return (
     <section aria-label="Subscription and value progress" style={{
-      background: '#111827', border: '1px solid #1e293b', borderRadius: 14,
+      background: '#101816', border: '1px solid #23312d', borderRadius: 14,
       padding: '18px 20px', marginBottom: 24,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
@@ -91,7 +91,7 @@ export default function SubscriberValueCard({
         </div>
 
         <div style={{ minWidth: 280, flex: '1 1 360px' }}>
-          <div style={{ background: '#0d1529', border: '1px solid #2563eb55', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+          <div style={{ background: '#0c1211', border: '1px solid #34d39955', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
             <div style={{ color: '#6ee7b7', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>Your next move</div>
             <strong style={{ color: '#f1f5f9', fontSize: 14 }}>{next.title}</strong>
             <p style={{ color: '#94a3b8', fontSize: 12, lineHeight: 1.5, margin: '5px 0 9px' }}>{next.detail}</p>
@@ -99,7 +99,7 @@ export default function SubscriberValueCard({
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
             <strong style={{ color: '#e2e8f0', fontSize: 13 }}>Get value from this week</strong>
-            <span style={{ color: completed === tasks.length ? '#22c55e' : '#60a5fa', fontSize: 12 }}>
+            <span style={{ color: completed === tasks.length ? '#22c55e' : '#34d399', fontSize: 12 }}>
               {completed}/{tasks.length} complete
             </span>
           </div>
@@ -112,7 +112,7 @@ export default function SubscriberValueCard({
               }}>
                 {task.done ? <CheckCircle2 size={16} color="#22c55e" /> : <Circle size={16} color="#475569" />}
                 <span style={{ textDecoration: task.done ? 'line-through' : 'none' }}>{task.label}</span>
-                {!task.done && <ArrowRight size={14} color="#60a5fa" style={{ marginLeft: 'auto' }} />}
+                {!task.done && <ArrowRight size={14} color="#34d399" style={{ marginLeft: 'auto' }} />}
               </button>
             ))}
           </div>
