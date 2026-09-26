@@ -126,6 +126,12 @@ export default function Dashboard() {
   // Authoritative entitlement for the selector: which specific counties this user may open.
   // Canonical selected_counties, with legacy allowed_counties (slug list only) migrated in.
   const allowedCounties = migrateLegacySelectedCounties(user?.publicMetadata as any);
+  // Customer-selected trades are the operational lens for Opportunities/Targeting. County-wide
+  // market KPIs remain unfiltered so contractors can still see the broader market context.
+  const selectedTrades = Array.isArray((user?.publicMetadata as any)?.selected_trades)
+    ? ((user?.publicMetadata as any).selected_trades as string[]).filter(Boolean)
+    : [];
+  const primaryTrade = selectedTrades[0] || '';
 
   const [counties, setCounties]     = useState<any[]>([]);
   const [county, setCounty]         = useState('');  // '' until resolved (localStorage / Clerk metadata) or user picks
@@ -285,7 +291,7 @@ export default function Dashboard() {
     Promise.all([
       apiFetch(`/summary?county=${county}`, getToken).then(r => r.json()),
       // Phase A: ranked opportunities. 403 for preview/no-tier -> empty (the tab shows PreviewLock).
-      apiFetch(`/permits/scored?county=${county}&top_n=50`, getToken)
+      apiFetch(`/permits/scored?county=${county}&top_n=50${primaryTrade ? `&trade=${encodeURIComponent(primaryTrade)}` : ''}`, getToken)
         .then(r => (r.ok ? r.json() : { permits: [] }))
         .catch(() => ({ permits: [] })),
       // Phase B: weekly digest briefing. 403 for preview/no-tier -> null (card hidden).
@@ -298,7 +304,7 @@ export default function Dashboard() {
       setDigest(dg);
       setLoading(false);
     }).catch(() => setLoading(false));
-  }, [county, limits.permits, getToken]);
+  }, [county, limits.permits, getToken, primaryTrade]);
 
   // Permits list — its own fetch, keyed on the committed query (server-side keyword search runs over
   // the full authorized dataset BEFORE the tier cap). AbortController cancels the in-flight request
@@ -731,7 +737,9 @@ export default function Dashboard() {
                       Smart Targeting · {summary.label}
                     </div>
                     <div style={{ fontSize: 14, color: '#e2e8f0' }}>
-                      {summary.targeting.recommendation}
+                      {primaryTrade && summary.trade_breakdown?.[primaryTrade]
+                        ? `Your ${primaryTrade.replace(/_/g, ' ')} market: ${summary.trade_breakdown[primaryTrade]} permits in ${summary.label}. Your Opportunity Queue is ranked within this trade.`
+                        : summary.targeting.recommendation}
                     </div>
                   </div>
                 </div>
