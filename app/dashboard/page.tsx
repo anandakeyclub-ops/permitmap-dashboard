@@ -96,7 +96,7 @@ function PreviewLock({ compact = false }: { compact?: boolean }) {
       </p>
       <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
         <button onClick={() => startCheckout('starter')} style={{
-          background: '#2563eb', color: '#fff', fontSize: 13, fontWeight: 700,
+          background: '#34d399', color: '#062018', fontSize: 13, fontWeight: 700,
           padding: '10px 22px', borderRadius: 8, border: 'none', cursor: 'pointer' }}>
           Start Starter trial →
         </button>
@@ -587,9 +587,9 @@ export default function Dashboard() {
                     <button key={c.key} onClick={e => (locked ? openUpgrade(c, e.currentTarget) : selectCounty(c.key))}
                       style={{
                         padding: '10px 16px', borderRadius: 10, cursor: 'pointer',
-                        background: locked ? 'transparent' : '#1e3a5f',
+                        background: locked ? 'transparent' : 'rgba(52,211,153,.12)',
                         border: `1px solid ${locked ? '#1e293b' : '#2563eb'}`,
-                        color: locked ? '#475569' : '#93c5fd', fontSize: 13, fontWeight: 600,
+                        color: locked ? '#475569' : '#6ee7b7', fontSize: 13, fontWeight: 600,
                         display: 'inline-flex', alignItems: 'center', gap: 6,
                       }}>
                       {c.label}
