@@ -89,6 +89,8 @@ it('migrateLegacySelectedCounties: "5" does NOT become a selection; slug list mi
   expect(migrateLegacySelectedCounties(null)).toEqual([]);
   expect(migrateLegacySelectedCounties({ allowed_counties: ['palm_beach', 'marion'] })).toEqual(['palm_beach', 'marion']);
   expect(migrateLegacySelectedCounties({ selected_counties: ['lee'], allowed_counties: ['marion'] })).toEqual(['lee']);
+  expect(migrateLegacySelectedCounties({ county: 'palm_beach' })).toEqual(['palm_beach']);
+  expect(migrateLegacySelectedCounties({ selected_counties: ['lee'], county: 'palm_beach' })).toEqual(['lee']);
 });
 
 it('a Belman legacy row (numeric allowance, no selection) stays incomplete', () => {
