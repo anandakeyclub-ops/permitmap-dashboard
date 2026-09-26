@@ -56,7 +56,7 @@ export default function OnboardingPage() {
       try {
         // County taxonomy is public product configuration. Do not make onboarding depend on a
         // Clerk JWT template/session being accepted by the data API during an auth migration.
-        const r = await apiFetch('/counties', getToken);
+        const r = await apiFetch('/counties');
         if (!r.ok) throw new Error(`counties_${r.status}`);
         const d: any = await r.json();
         if (!cancelled) setCounties((d?.counties || []).filter((c: CountyOpt) => c.key));
@@ -68,7 +68,7 @@ export default function OnboardingPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [getToken]);
+  }, []);
 
   const atCountyLimit = !allCounties && selCounties.length >= limit;
   const visibleCounties = useMemo(() => {
