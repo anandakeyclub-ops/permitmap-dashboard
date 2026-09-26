@@ -112,3 +112,10 @@
   .pm-btn-secondary { transition: background-color 140ms ease-out, border-color 140ms ease-out; }
   .pm-btn-secondary:not(:disabled):active { transform: none; }
 }
+
+
+/* PermitMap public-brand reconciliation.
+   Presentation-only bridge for legacy dashboard blue accents; functionality/layout untouched. */
+.pm-brand-shell { background: var(--pm-brand-base); color: var(--pm-text-primary); }
+.pm-brand-wordmark { color: var(--pm-text-primary); font-weight: 700; letter-spacing: -.02em; }
+.pm-brand-wordmark-map { color: var(--pm-brand-primary); }
