@@ -153,3 +153,9 @@
   }
   .pm-dashboard-tabs > button { padding-left: 14px !important; padding-right: 14px !important; }
 }
+
+
+/* Opportunity queue mobile ergonomics */
+@media (max-width: 640px) {
+  .pm-opportunity-hero { flex-direction: column; gap: 12px !important; }
+}
