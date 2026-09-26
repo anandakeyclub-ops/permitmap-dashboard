@@ -81,10 +81,13 @@ export default function OnboardingPage() {
     [allCounties, selCounties, selTrades, saving]);
 
   function toggleCounty(key: string) {
-    setSelCounties((cur) =>
-      cur.includes(key) ? cur.filter((k) => k !== key)
-        : atCountyLimit ? cur                         // client hint; server enforces authoritatively
-          : [...cur, key]);
+    setSelCounties((cur) => {
+      if (cur.includes(key)) return cur.filter((k) => k !== key);
+      // Starter is a single-market workspace: choosing another market should SWITCH the market,
+      // not disable every option because a resumed/legacy selection already occupies the slot.
+      if (!allCounties && limit === 1) return [key];
+      return atCountyLimit ? cur : [...cur, key];    // server still enforces authoritatively
+    });
   }
   function toggleTrade(t: string) {
     setSelTrades((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]));
@@ -147,8 +150,8 @@ export default function OnboardingPage() {
             {visibleCounties.map((c,i) => {
               const on = selCounties.includes(c.key);
               return (
-                <button type="button" key={c.key} disabled={!on && atCountyLimit} onClick={()=>toggleCounty(c.key)}
-                  style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', textAlign:'left', padding:'12px 14px', border:0, borderTop:i?'1px solid #23312d':0, background:on?'rgba(52,211,153,.10)':'#0c1211', color:on?'#34d399':'#e2e8f0', fontWeight:on?800:650, cursor:!on&&atCountyLimit?'not-allowed':'pointer', opacity:!on&&atCountyLimit?.45:1 }}>
+                <button type="button" key={c.key} disabled={!on && atCountyLimit && limit !== 1} onClick={()=>toggleCounty(c.key)}
+                  style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', textAlign:'left', padding:'12px 14px', border:0, borderTop:i?'1px solid #23312d':0, background:on?'rgba(52,211,153,.10)':'#0c1211', color:on?'#34d399':'#e2e8f0', fontWeight:on?800:650, cursor:!on&&atCountyLimit&&limit!==1?'not-allowed':'pointer', opacity:!on&&atCountyLimit&&limit!==1?.45:1 }}>
                   <span>{cleanMarketName(c)}</span><span style={{ width:18,height:18,borderRadius:999,border:on?'5px solid #34d399':'1.5px solid #475569',background:'#fff',boxSizing:'border-box' }} />
                 </button>
               );
