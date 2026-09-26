@@ -462,7 +462,7 @@ export default function Dashboard() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#0a0f1e',
+      background: '#090d0c',
       color: '#e2e8f0',
       fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif",
     }}>
@@ -481,13 +481,13 @@ export default function Dashboard() {
         zIndex: 50,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <MapPin size={22} color="#3b82f6" />
+          <svg width="24" height="28" viewBox="0 0 28 34" fill="none" aria-hidden="true"><path d="M14 1C6.82 1 1 6.82 1 14c0 9.2 13 19 13 19s13-9.8 13-19C27 6.82 21.18 1 14 1Z" stroke="#34d399" strokeWidth="2"/><rect x="9" y="8" width="10" height="12" rx="1" stroke="currentColor" strokeWidth="1.5"/><path d="M11 11h6M11 14h6M11 17h4" stroke="currentColor" strokeLinecap="round"/></svg>
           <span style={{ fontWeight: 700, fontSize: 18, letterSpacing: '-0.02em' }}>
-            permit<span style={{ color: '#3b82f6' }}>map</span>
+            Permit<span style={{ color: '#34d399' }}>Map</span>
           </span>
           <span style={{
-            background: '#1e3a5f',
-            color: '#60a5fa',
+            background: 'rgba(52,211,153,.12)',
+            color: '#34d399',
             fontSize: 11,
             fontWeight: 600,
             padding: '2px 8px',
@@ -502,8 +502,8 @@ export default function Dashboard() {
           </span>
           {tier !== 'team' && (
             <button onClick={e => openFullAccess(e.currentTarget)} style={{
-              background: '#2563eb',
-              color: '#fff',
+              background: '#34d399',
+              color: '#062018',
               fontSize: 12,
               fontWeight: 600,
               padding: '6px 14px',
@@ -520,7 +520,7 @@ export default function Dashboard() {
         {/* Sidebar — County selector */}
         <aside style={{
           width: 220,
-          borderRight: '1px solid #1e293b',
+          borderRight: '1px solid #23312d',
           padding: '20px 0',
           overflowY: 'auto',
           flexShrink: 0,
@@ -537,11 +537,11 @@ export default function Dashboard() {
               <button key={c.key} onClick={e => (locked ? openUpgrade(c, e.currentTarget) : selectCounty(c.key))}
                 style={{
                   width: '100%', textAlign: 'left', padding: '10px 16px',
-                  background: active ? '#1e3a5f' : 'transparent',
+                  background: active ? 'rgba(52,211,153,.10)' : 'transparent',
                   border: 'none', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   opacity: locked ? 0.4 : 1,
-                  borderLeft: active ? '3px solid #3b82f6' : '3px solid transparent',
+                  borderLeft: active ? '3px solid #34d399' : '3px solid transparent',
                 }}>
                 <span style={{ fontSize: 13, color: active ? '#93c5fd' : '#94a3b8', fontWeight: active ? 600 : 400 }}>
                   {c.label}
@@ -552,8 +552,8 @@ export default function Dashboard() {
             );
           })}
           {tier !== 'team' && (
-            <div style={{ margin: '16px', padding: '12px', background: '#1e293b',
-              borderRadius: 8, textAlign: 'center' }}>
+            <div style={{ margin: '16px', padding: '12px', background: '#101816',
+              border: '1px solid #23312d', borderRadius: 8, textAlign: 'center' }}>
               <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 8px' }}>
                 {limits.counties === 1 ? 'Upgrade for 5 counties' : 'Upgrade for all counties'}
               </p>
@@ -588,7 +588,7 @@ export default function Dashboard() {
                       style={{
                         padding: '10px 16px', borderRadius: 10, cursor: 'pointer',
                         background: locked ? 'transparent' : 'rgba(52,211,153,.12)',
-                        border: `1px solid ${locked ? '#1e293b' : '#2563eb'}`,
+                        border: `1px solid ${locked ? '#23312d' : '#34d399'}`,
                         color: locked ? '#475569' : '#6ee7b7', fontSize: 13, fontWeight: 600,
                         display: 'inline-flex', alignItems: 'center', gap: 6,
                       }}>
