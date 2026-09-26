@@ -91,12 +91,12 @@ export default function DigestCard({ digest, label, county, onView }:
 
   return (
     <div style={{
-      background: 'linear-gradient(135deg, #1e3a5f 0%, #0d1529 100%)',
+      background: 'linear-gradient(135deg, rgba(52,211,153,.12) 0%, #0c1211 100%)',
       border: '1px solid #2563eb55', borderRadius: 14, padding: '20px 24px', marginBottom: 24,
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <ClipboardList size={20} color="#60a5fa" />
+          <ClipboardList size={20} color="#34d399" />
           <div>
             <div style={{ fontSize: 11, color: '#60a5fa', fontWeight: 700,
               textTransform: 'uppercase', letterSpacing: '0.08em' }}>Your 60-second briefing</div>
@@ -145,7 +145,7 @@ export default function DigestCard({ digest, label, county, onView }:
       {/* CTA → Opportunity Queue */}
       <button onClick={onView} style={{
         display: 'inline-flex', alignItems: 'center', gap: 6,
-        background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8,
+        background: '#34d399', color: '#062018', border: 'none', borderRadius: 8,
         padding: '10px 20px', fontSize: 14, fontWeight: 700, cursor: 'pointer',
       }}>
         View Full Opportunities <ChevronRight size={16} />

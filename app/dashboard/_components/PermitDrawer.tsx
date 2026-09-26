@@ -93,9 +93,9 @@ export default function PermitDrawer({
                 display: 'inline-flex', alignItems: 'center', gap: 8,
                 padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
                 cursor: saved || saving ? 'default' : 'pointer',
-                background: saved ? 'transparent' : '#1e3a5f',
+                background: saved ? 'transparent' : 'rgba(52,211,153,.12)',
                 border: `1px solid ${saved ? '#facc15' : '#2563eb'}`,
-                color: saved ? '#facc15' : '#93c5fd',
+                color: saved ? '#facc15' : '#6ee7b7',
               }}>
               {saving ? (
                 <span style={{ width: 14, height: 14, border: '2px solid #1e293b',

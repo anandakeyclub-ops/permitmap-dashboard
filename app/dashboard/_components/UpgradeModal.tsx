@@ -186,7 +186,7 @@ export default function UpgradeModal({
         {/* What they're trying to access */}
         <div style={{ margin: '16px 0', padding: '14px 16px', borderRadius: 12,
           background: 'linear-gradient(135deg, #1e3a5f 0%, #0d1529 100%)', border: '1px solid #2563eb40' }}>
-          <div style={{ fontSize: 11, color: '#60a5fa', fontWeight: 700, textTransform: 'uppercase',
+          <div style={{ fontSize: 11, color: '#6ee7b7', fontWeight: 700, textTransform: 'uppercase',
             letterSpacing: '0.08em', marginBottom: 6 }}>
             {isGeneric ? 'With full access' : "You're trying to open"}
           </div>
@@ -234,7 +234,7 @@ export default function UpgradeModal({
                 {active && (
                   <span style={{ position: 'absolute', top: 8, right: 8, color: '#2563eb' }}><Check size={15} /></span>
                 )}
-                <div style={{ fontSize: 13, fontWeight: 800, color: active ? '#93c5fd' : '#e2e8f0' }}>{p.label}</div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: active ? '#6ee7b7' : '#e2e8f0' }}>{p.label}</div>
                 <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{p.counties}</div>
                 <div style={{ fontSize: 11, color: '#94a3b8' }}>{p.opps}</div>
               </button>
@@ -244,7 +244,7 @@ export default function UpgradeModal({
 
         {/* CTAs */}
         <button onClick={startTrial} style={{
-          width: '100%', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 10,
+          width: '100%', background: '#34d399', color: '#062018', border: 'none', borderRadius: 10,
           padding: '13px 20px', fontSize: 15, fontWeight: 800, cursor: 'pointer', marginBottom: 8,
         }}>
           Start 14-Day Trial
