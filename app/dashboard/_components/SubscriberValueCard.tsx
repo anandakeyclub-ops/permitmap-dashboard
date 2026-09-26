@@ -92,7 +92,7 @@ export default function SubscriberValueCard({
 
         <div style={{ minWidth: 280, flex: '1 1 360px' }}>
           <div style={{ background: '#0d1529', border: '1px solid #2563eb55', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
-            <div style={{ color: '#60a5fa', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>Your next move</div>
+            <div style={{ color: '#6ee7b7', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>Your next move</div>
             <strong style={{ color: '#f1f5f9', fontSize: 14 }}>{next.title}</strong>
             <p style={{ color: '#94a3b8', fontSize: 12, lineHeight: 1.5, margin: '5px 0 9px' }}>{next.detail}</p>
             <button onClick={nextAction} className="pm-btn-secondary">{next.cta} <ArrowRight size={14} /></button>

@@ -113,9 +113,9 @@ export default function SavedSearches({
           style={{
             padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
             cursor: name.trim() ? 'pointer' : 'not-allowed',
-            background: name.trim() ? '#1e3a5f' : 'transparent',
-            border: `1px solid ${name.trim() ? '#2563eb' : '#1e293b'}`,
-            color: name.trim() ? '#93c5fd' : '#475569',
+            background: name.trim() ? 'rgba(52,211,153,.12)' : 'transparent',
+            border: `1px solid ${name.trim() ? '#34d399' : '#1e293b'}`,
+            color: name.trim() ? '#6ee7b7' : '#475569',
           }}>
           Save current
         </button>

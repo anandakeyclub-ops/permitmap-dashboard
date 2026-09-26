@@ -230,7 +230,7 @@ export default function SavedLeads({ getToken, onBrowse }:
         </p>
         {onBrowse && (
           <button onClick={onBrowse} style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
-            background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8,
+            background: '#34d399', color: '#062018', border: 'none', borderRadius: 8,
             padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
             <Target size={15} /> Browse opportunities
           </button>
