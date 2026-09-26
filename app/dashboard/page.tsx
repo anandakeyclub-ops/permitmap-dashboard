@@ -693,8 +693,7 @@ export default function Dashboard() {
               )}
 
               {/* KPI Cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: 16, marginBottom: 28 }}>
+              <div className="pm-kpi-grid" style={{ gap: 16, marginBottom: 28 }}>
                 {[
                   { label: 'Total Permits', value: summary.kpis?.total_permits, icon: Building2, color: '#3b82f6' },
                   { label: 'High Value (50k+)', value: summary.kpis?.high_value_count, icon: TrendingUp, color: '#22c55e' },
@@ -745,8 +744,8 @@ export default function Dashboard() {
               )}
 
               {/* Tabs */}
-              <div style={{ display: 'flex', gap: 4, marginBottom: 20,
-                borderBottom: '1px solid #1e293b', paddingBottom: 0 }}>
+              <div className="pm-dashboard-tabs" style={{ gap: 4, marginBottom: 20,
+                borderBottom: '1px solid #23312d', paddingBottom: 0 }}>
                 {(['opportunities', 'permits', 'trends', 'insights', 'saved'] as const).map(tab => (
                   <button key={tab} onClick={() => setActiveTab(tab)} style={{
                     padding: '8px 18px', background: 'none', border: 'none',
@@ -1121,7 +1120,7 @@ export default function Dashboard() {
                     </ResponsiveContainer>
                     {valuationCoverage<70 && <div style={{fontSize:10.5,color:'#64748b',lineHeight:1.45,marginTop:8}}>Interpret cautiously: not every permit reports valuation. Coverage shown above is for the displayed observed months.</div>}
                   </div>}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.35fr) minmax(280px,.65fr)', gap: 20 }}>
+                  <div className="pm-intelligence-grid" style={{ gap: 20 }}>
                   {/* Trade volume chart */}
                   <div style={{ background: '#111827', border: '1px solid #1e293b',
                     borderRadius: 12, padding: '20px 24px' }}>
