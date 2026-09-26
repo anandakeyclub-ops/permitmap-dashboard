@@ -1047,15 +1047,21 @@ export default function Dashboard() {
                 </>
               )}
 
-              {/* TRENDS TAB */}
+              {/* TRENDS TAB — decision-support visuals from live summary data only. */}
               {activeTab === 'trends' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                <div>
+                  <div style={{ marginBottom:18 }}>
+                    <div style={{ fontSize:11, fontWeight:800, color:'#34d399', textTransform:'uppercase', letterSpacing:'.1em', marginBottom:5 }}>Market intelligence</div>
+                    <h2 style={{ margin:'0 0 6px', fontSize:20, color:'#f8fafc', letterSpacing:'-.02em' }}>Where demand is concentrated</h2>
+                    <p style={{ margin:0, fontSize:13, color:'#94a3b8', lineHeight:1.5 }}>Use current permit volume to decide which trades and ZIP codes deserve attention. These are live counts for the selected market—not forecasts.</p>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.35fr) minmax(280px,.65fr)', gap: 20 }}>
                   {/* Trade volume chart */}
                   <div style={{ background: '#111827', border: '1px solid #1e293b',
                     borderRadius: 12, padding: '20px 24px' }}>
                     <h3 style={{ margin: '0 0 16px', fontSize: 13, fontWeight: 700,
                       color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      Permits by Trade
+                      Permit volume by trade
                     </h3>
                     <ResponsiveContainer width="100%" height={240}>
                       <BarChart data={tradeChartData} layout="vertical">
@@ -1063,7 +1069,7 @@ export default function Dashboard() {
                         <YAxis dataKey="trade" type="category" tick={{ fontSize: 11, fill: '#94a3b8' }}
                           axisLine={false} tickLine={false} width={100} />
                         <Tooltip
-                          contentStyle={{ background: '#1e293b', border: '1px solid #334155',
+                          contentStyle={{ background: '#0c1211', border: '1px solid #33413d',
                             borderRadius: 8, fontSize: 12 }}
                           cursor={{ fill: '#ffffff08' }}
                         />
@@ -1081,15 +1087,15 @@ export default function Dashboard() {
                     borderRadius: 12, padding: '20px 24px' }}>
                     <h3 style={{ margin: '0 0 16px', fontSize: 13, fontWeight: 700,
                       color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      Hottest ZIP Codes
+                      Highest-activity ZIP codes
                     </h3>
                     {summary.targeting?.top_zips?.map((z: any, i: number) => (
                       <div key={z.zip} style={{ display: 'flex', alignItems: 'center',
                         justifyContent: 'space-between', padding: '10px 0',
                         borderBottom: i < summary.targeting.top_zips.length - 1
-                          ? '1px solid #1e293b' : 'none' }}>
+                          ? '1px solid #23312d' : 'none' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: '#3b82f6',
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#34d399',
                             width: 20, textAlign: 'center' }}>#{i + 1}</span>
                           <span style={{ fontSize: 14, fontWeight: 600, color: '#e2e8f0' }}>
                             {z.zip}
@@ -1098,6 +1104,7 @@ export default function Dashboard() {
                         <span style={{ fontSize: 13, color: '#64748b' }}>{z.count} permits</span>
                       </div>
                     ))}
+                  </div>
                   </div>
                 </div>
               )}
