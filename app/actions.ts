@@ -19,7 +19,7 @@ export interface SaveOnboardingResult { ok: boolean; complete: boolean; errors: 
  * (allowed_counties, selected_trades, onboarding_complete) — never clobbering tier/billing_status.
  */
 export async function saveOnboardingSelections(input: { counties: string[]; trades: string[] }): Promise<SaveOnboardingResult> {
-  const { userId, getToken } = await auth();
+  const { userId } = await auth();
   if (!userId) return { ok: false, complete: false, errors: ['unauthenticated'] };
   const client = await clerkClient();
   const user = await client.users.getUser(userId);
