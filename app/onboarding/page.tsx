@@ -56,16 +56,19 @@ export default function OnboardingPage() {
       try {
         // County taxonomy is public product configuration. Do not make onboarding depend on a
         // Clerk JWT template/session being accepted by the data API during an auth migration.
-        const r = await apiFetch('/counties');
+        const r = await apiFetch('/counties', getToken);
         if (!r.ok) throw new Error(`counties_${r.status}`);
         const d: any = await r.json();
         if (!cancelled) setCounties((d?.counties || []).filter((c: CountyOpt) => c.key));
       } catch {
-        if (!cancelled) setCounties([]);
+        if (!cancelled) {
+          setCounties([]);
+          setErrors(cur => cur.includes('markets_load_failed') ? cur : [...cur, 'markets_load_failed']);
+        }
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [getToken]);
 
   const atCountyLimit = !allCounties && selCounties.length >= limit;
   const visibleCounties = useMemo(() => {
@@ -150,7 +153,9 @@ export default function OnboardingPage() {
                 </button>
               );
             })}
-            {counties.length === 0 && <div style={{ padding:16, color:'#64748b' }}>Loading markets…</div>}
+            {counties.length === 0 && <div style={{padding:16,color:'#94a3b8',lineHeight:1.5}}>
+              {errors.includes('markets_load_failed') ? <>Markets could not load. <button type="button" onClick={()=>window.location.reload()} style={{border:0,background:'transparent',color:'#34d399',fontWeight:800,cursor:'pointer',padding:0}}>Retry</button></> : 'Loading markets…'}
+            </div>}
             {counties.length > 0 && visibleCounties.length === 0 && <div style={{ padding:16, color:'#64748b' }}>No matching markets.</div>}
           </div>
           {!countyQuery && counties.length > 12 && <button type="button" onClick={()=>setShowAllMarkets(v=>!v)}
