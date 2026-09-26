@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { CreditCard, CheckCircle2, Circle, ArrowRight, ShieldCheck } from 'lucide-react';
-import { apiFetch, type GetToken } from '../../../lib/api';
+import { apiFetch, getSavedLeads, type GetToken } from '../../../lib/api';
 import { billingMessage, money, type SubscriptionSnapshot } from '../../../lib/subscription-summary';
 import { nextValueAction } from '../../../lib/subscriberValue';
 
@@ -26,14 +26,24 @@ export default function SubscriberValueCard({
   const [subscription, setSubscription] = useState<SubscriptionSnapshot | null>(null);
   const [activation, setActivation] = useState<ActivationState | null>(null);
   const [portalBusy, setPortalBusy] = useState(false);
+  const [roi, setRoi] = useState<{won:number; quoted:number; worked:number} | null>(null);
 
   useEffect(() => {
     Promise.all([
       fetch('/api/subscription', { cache: 'no-store' }).then(r => r.ok ? r.json() : null),
       apiFetch('/analytics/activation', getToken).then(r => r.ok ? r.json() : null),
-    ]).then(([s, a]) => {
+      getSavedLeads(getToken).catch(() => null),
+    ]).then(([s, a, saved]) => {
       if (s) setSubscription(s);
       if (a) setActivation(a);
+      if (saved?.leads) {
+        const rows=saved.leads;
+        setRoi({
+          won: rows.filter((l:any)=>l.status==='won').reduce((n:number,l:any)=>n+(l.won_amount||0),0),
+          quoted: rows.filter((l:any)=>l.status==='quoted').reduce((n:number,l:any)=>n+(l.quoted_amount||0),0),
+          worked: rows.filter((l:any)=>['called','quoted','won'].includes(l.status)).length,
+        });
+      }
     }).catch(() => {});
   }, [getToken]);
 
@@ -83,6 +93,12 @@ export default function SubscriberValueCard({
             Your email is the weekly summary. The dashboard is where you rank, filter, save,
             export, and track the permits worth working.
           </p>
+          {roi && (roi.worked>0 || roi.quoted>0 || roi.won>0) && <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:8,margin:'0 0 14px'}}>
+            <div style={{background:'#0c1211',border:'1px solid #23312d',borderRadius:8,padding:'9px 10px'}}><strong style={{display:'block',fontSize:16,color:'#f8fafc'}}>{roi.worked}</strong><span style={{fontSize:10.5,color:'#64748b'}}>Leads worked</span></div>
+            <div style={{background:'#0c1211',border:'1px solid #23312d',borderRadius:8,padding:'9px 10px'}}><strong style={{display:'block',fontSize:16,color:'#f8fafc'}}>{'$'}{roi.quoted.toLocaleString()}</strong><span style={{fontSize:10.5,color:'#64748b'}}>Open quotes</span></div>
+            <div style={{background:'rgba(34,197,94,.07)',border:'1px solid #22c55e40',borderRadius:8,padding:'9px 10px'}}><strong style={{display:'block',fontSize:16,color:'#86efac'}}>{'$'}{roi.won.toLocaleString()}</strong><span style={{fontSize:10.5,color:'#64748b'}}>Won revenue tracked</span></div>
+          </div>}
+          {roi && roi.won>0 && subscription?.amount && <div style={{fontSize:11,color:'#94a3b8',lineHeight:1.45,margin:'-4px 0 12px'}}>Tracked won revenue is <strong style={{color:'#86efac'}}>{(roi.won/subscription.amount).toFixed(1)}×</strong> the current monthly subscription amount. This is customer-entered won revenue, not an attribution claim that PermitMap caused the sale.</div>}
           {subscription && (
             <button onClick={manageBilling} disabled={portalBusy} className="pm-btn-secondary">
               <CreditCard size={14} /> {portalBusy ? 'Opening…' : 'Manage billing'}
