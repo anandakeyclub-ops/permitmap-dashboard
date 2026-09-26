@@ -19,6 +19,9 @@ export const ACTIVATION_EVENTS = [
   'contractor_profile_view',
   'csv_export',
   'saved_lead',
+  'lead_status_changed',
+  'lead_followup_scheduled',
+  'lead_value_recorded',
 ] as const;
 
 export type ActivationEvent = (typeof ACTIVATION_EVENTS)[number];
@@ -107,4 +110,16 @@ export function permitSearchEvent(query: string, county: string, resultCount: nu
   const q = query.trim();
   if (!q) return null;
   return { event: 'permit_search', props: { county, properties: { query: q, result_count: Math.max(0, resultCount) } } };
+}
+
+
+export function leadStatusChangedEvent(from: string, to: string): ActivationEmit {
+  return { event: 'lead_status_changed', props: { properties: { from_status: from, to_status: to } } };
+}
+export function leadFollowupScheduledEvent(hasDate: boolean): ActivationEmit {
+  return { event: 'lead_followup_scheduled', props: { properties: { scheduled: hasDate } } };
+}
+export function leadValueRecordedEvent(field: 'quoted_amount' | 'won_amount', amount: number | null): ActivationEmit | null {
+  if (amount === null || amount <= 0) return null;
+  return { event: 'lead_value_recorded', props: { properties: { value_type: field === 'won_amount' ? 'won' : 'quoted', amount } } };
 }

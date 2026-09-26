@@ -6,6 +6,8 @@ import {
   getSavedLeads, updateSavedLead, deleteSavedLead, type GetToken,
 } from '../../../lib/api';
 import type { SavedLead, SavedLeadStatus } from '../../../lib/types';
+import { track } from '../../../lib/analytics';
+import { leadStatusChangedEvent, leadFollowupScheduledEvent, leadValueRecordedEvent } from '../../../lib/activationEvents';
 
 // Phase C — Saved tab. Sources the new Postgres /saved-leads model (status pipeline),
 // NOT the legacy file-based /saved/_tag store. One getSavedLeads() call on open;
@@ -107,6 +109,7 @@ export default function SavedLeads({ getToken, onBrowse }:
     try {
       const result = await updateSavedLead(getToken, lead.id, next);
       setLeads(ls => ls.map(l => l.id === lead.id ? result.lead : l));
+      const ev=leadStatusChangedEvent(prevLead.status,next); track(getToken,ev.event,ev.props);
     } catch {
       setLeads(ls => ls.map(l => l.id === lead.id ? prevLead : l)); // revert full row
       notify('Failed to update status — try again');
@@ -129,6 +132,7 @@ export default function SavedLeads({ getToken, onBrowse }:
       const result = await updateSavedLead(getToken, lead.id, undefined, undefined, { [field]: amount });
       setLeads(ls => ls.map(l => l.id === lead.id ? result.lead : l));
       setAmountDrafts(d => { const n = { ...d }; delete n[draftKey]; return n; });
+      const ev=leadValueRecordedEvent(field,amount); if(ev) track(getToken,ev.event,ev.props);
     } catch {
       setLeads(ls => ls.map(l => l.id === lead.id ? prevLead : l));
       setAmountDrafts(d => ({ ...d, [draftKey]: prevLead[field] == null ? '' : String(prevLead[field]) }));
@@ -168,6 +172,7 @@ export default function SavedLeads({ getToken, onBrowse }:
       const result = await updateSavedLead(getToken, lead.id, undefined, undefined, undefined, iso);
       setLeads(ls => ls.map(l => l.id === lead.id ? result.lead : l));
       setFollowUpDrafts(d => { const n={...d}; delete n[lead.id]; return n; });
+      const ev=leadFollowupScheduledEvent(!!raw); track(getToken,ev.event,ev.props);
     } catch {
       setLeads(ls => ls.map(l => l.id === lead.id ? prevLead : l));
       notify('Failed to schedule follow-up — try again');
