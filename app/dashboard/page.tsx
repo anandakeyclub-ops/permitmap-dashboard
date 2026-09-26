@@ -675,22 +675,8 @@ export default function Dashboard() {
                   onOpportunities={goToQueue} onSaved={() => setActiveTab('saved')} />
               )}
 
-              {!isPreview && (
-                <SubscriberValueCard
-                  getToken={getToken}
-                  tier={tier}
-                  savedLeadCount={savedLeadIds.size}
-                  onOpportunities={goToQueue}
-                  onPermits={() => setActiveTab('permits')}
-                  onSaved={() => setActiveTab('saved')}
-                />
-              )}
-
-              {/* Phase B: Weekly Digest Card — 60-second briefing, above the Opportunity Queue.
-                  Paid/trial only (digest 403 for preview -> digest stays null -> card hidden). */}
-              {!isPreview && digest && (
-                <DigestCard digest={digest} label={summary.label} county={county} onView={goToQueue} />
-              )}
+              {/* Secondary retention/progress surfaces moved out of the default money-making
+                  path. They render contextually in Briefing below, keeping Opportunities above-fold. */}
 
               {/* KPI Cards */}
               <div className="pm-kpi-grid" style={{ gap: 16, marginBottom: 28 }}>
@@ -721,7 +707,8 @@ export default function Dashboard() {
               {/* Phase 1.5: preview users see KPI counts above + locked upgrade path here */}
               {isPreview && <PreviewLock />}
 
-              {/* Smart targeting */}
+              {/* Smart targeting: keep the recommendation in the default workflow because it
+                  directly helps prioritize work; deeper briefing/progress is progressively disclosed. */}
               {summary.targeting?.recommendation && (
                 <div style={{
                   background: 'linear-gradient(135deg, rgba(52,211,153,.10) 0%, #101816 100%)',
@@ -1189,6 +1176,20 @@ export default function Dashboard() {
                   </div>
                   </div>
                 </div>
+              )}
+
+              {activeTab === 'insights' && !isPreview && (
+                <>
+                  <SubscriberValueCard
+                    getToken={getToken}
+                    tier={tier}
+                    savedLeadCount={savedLeadIds.size}
+                    onOpportunities={goToQueue}
+                    onPermits={() => setActiveTab('permits')}
+                    onSaved={() => setActiveTab('saved')}
+                  />
+                  {digest && <DigestCard digest={digest} label={summary.label} county={county} onView={goToQueue} />}
+                </>
               )}
 
               {/* INSIGHTS TAB */}
