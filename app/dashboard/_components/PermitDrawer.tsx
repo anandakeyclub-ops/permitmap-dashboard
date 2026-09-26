@@ -99,7 +99,7 @@ export default function PermitDrawer({
               }}>
               {saving ? (
                 <span style={{ width: 14, height: 14, border: '2px solid #1e293b',
-                  borderTop: '2px solid #93c5fd', borderRadius: '50%',
+                  borderTop: '2px solid #6ee7b7', borderRadius: '50%',
                   animation: 'spin 0.8s linear infinite' }} aria-hidden="true" />
               ) : (
                 <Star size={16} color={saved ? '#facc15' : '#93c5fd'} fill={saved ? '#facc15' : 'none'} aria-hidden="true" />

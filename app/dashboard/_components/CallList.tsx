@@ -203,7 +203,7 @@ export default function CallList({ scored, topZips, getToken }:
           <button key={t} onClick={() => setTradeFilter(t)} style={{
             padding: '5px 12px', borderRadius: 20,
             border: `1px solid ${tradeFilter === t ? (TRADE_COLORS[t] || '#3b82f6') : '#1e293b'}`,
-            background: tradeFilter === t ? `${TRADE_COLORS[t] || '#2563eb'}20` : 'transparent',
+            background: tradeFilter === t ? `${TRADE_COLORS[t] || '#34d399'}20` : 'transparent',
             color: tradeFilter === t ? (TRADE_COLORS[t] || '#3b82f6') : '#64748b',
             fontSize: 12, fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize',
           }}>{t ? t.replace('_', ' ') : 'All Trades'}</button>
