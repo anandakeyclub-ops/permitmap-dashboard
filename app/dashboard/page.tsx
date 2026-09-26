@@ -651,8 +651,11 @@ export default function Dashboard() {
                   letterSpacing: '-0.03em', color: '#f1f5f9' }}>
                   {summary.label}
                 </h1>
-                <p style={{ color: '#475569', fontSize: 13, margin: '4px 0 0' }}>
-                  Week of {summary.week_of} · {summary.kpis?.total_permits} permits issued
+                <p style={{ color: '#64748b', fontSize: 13, margin: '4px 0 0', display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
+                  <span>Week of {summary.week_of} · {summary.kpis?.total_permits} permits loaded</span>
+                  {coverage?.history_end && <span style={{color:'#94a3b8'}}>· Latest issued date in loaded data: <strong style={{color:'#cbd5e1'}}>{formatHuman(coverage.history_end)}</strong></span>}
+                  {coverage?.coverage_scope === 'partial_county' && <span title={coverage.jurisdiction || undefined} style={{padding:'2px 7px',borderRadius:999,border:'1px solid #f59e0b55',background:'rgba(245,158,11,.08)',color:'#fcd34d',fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:'.05em'}}>Partial coverage</span>}
+                  {!coverage && coverageError && <span style={{color:'#fcd34d'}}>· Coverage metadata unavailable</span>}
                 </p>
               </div>
 

@@ -63,6 +63,12 @@ export interface CountyCoverage {
   history_start: string | null;   // available_date_from (ISO)
   history_end: string | null;     // available_date_to (ISO)
   permit_count: number | null;
+  coverage_scope?: string | null;
+  jurisdiction?: string | null;
+  owner_availability_pct?: number | null;
+  contractor_availability_pct?: number | null;
+  valuation_availability_pct?: number | null;
+  description_availability_pct?: number | null;
 }
 
 export async function getCoverage(
@@ -78,6 +84,12 @@ export async function getCoverage(
     history_start: j.history_start ?? null,
     history_end: j.history_end ?? null,
     permit_count: typeof j.permit_count === 'number' ? j.permit_count : null,
+    coverage_scope: j.coverage_scope ?? null,
+    jurisdiction: j.jurisdiction ?? null,
+    owner_availability_pct: typeof j.owner_availability_pct === 'number' ? j.owner_availability_pct : null,
+    contractor_availability_pct: typeof j.contractor_availability_pct === 'number' ? j.contractor_availability_pct : null,
+    valuation_availability_pct: typeof j.valuation_availability_pct === 'number' ? j.valuation_availability_pct : null,
+    description_availability_pct: typeof j.description_availability_pct === 'number' ? j.description_availability_pct : null,
   };
 }
 
