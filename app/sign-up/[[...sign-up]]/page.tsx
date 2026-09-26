@@ -38,7 +38,7 @@ export default async function SignUpPage({
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#0a0f1e',
+      background: '#090d0c',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',

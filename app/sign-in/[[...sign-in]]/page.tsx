@@ -24,7 +24,7 @@ export default async function SignInPage({
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#0a0f1e',
+      background: '#090d0c',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -36,3 +36,4 @@ export default async function SignInPage({
     </div>
   );
 }
+
