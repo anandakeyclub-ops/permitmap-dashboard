@@ -550,7 +550,7 @@ export default function Dashboard() {
               borderRadius: 6,
               border: 'none',
               cursor: 'pointer',
-            }}>Get Full Access</button>
+            }}>{isPreview ? 'Get Full Access' : 'Upgrade Plan'}</button>
           )}
         </div>
       </header>
@@ -682,6 +682,8 @@ export default function Dashboard() {
                   degrade silently; permit data and the existing dashboard remain untouched. */}
               {!isPreview && (
                 <TodayCommandCenter getToken={getToken} scoredCount={scored.length}
+                  tradeLabel={primaryTrade ? primaryTrade.replace(/_/g, ' ') : undefined}
+                  marketLabel={summary.label}
                   onOpportunities={goToQueue} onSaved={() => setActiveTab('saved')} />
               )}
 
