@@ -56,6 +56,10 @@ export function migrateLegacySelectedCounties(pm: Record<string, any> | null | u
   if (!pm) return [];
   if (Array.isArray(pm.selected_counties)) return pm.selected_counties.filter((c: any) => typeof c === 'string' && c.trim());
   if (Array.isArray(pm.allowed_counties)) return pm.allowed_counties.filter((c: any) => typeof c === 'string' && c.trim());
+  // Older/migrated production users can carry a single canonical county string. Treat it as the
+  // customer's selection, never as an allowance. This closes the dashboard seam while preserving
+  // selected_counties as the canonical new-write contract.
+  if (typeof pm.county === 'string' && pm.county.trim()) return [pm.county.trim()];
   return [];
 }
 
