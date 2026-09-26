@@ -711,9 +711,12 @@ export default function Dashboard() {
               {/* Phase 1.5: preview users see KPI counts above + locked upgrade path here */}
               {isPreview && <PreviewLock />}
 
-              {/* Smart targeting: keep the recommendation in the default workflow because it
-                  directly helps prioritize work; deeper briefing/progress is progressively disclosed. */}
-              {summary.targeting?.recommendation && (
+              {/* Smart Targeting must be a concise county-local recommendation. Never render
+                  malformed/contaminated prose into the primary workflow; the structured ZIP/trade
+                  intelligence remains available in Market Intelligence. */}
+              {summary.targeting?.recommendation &&
+               summary.targeting.recommendation.length <= 180 &&
+               /^Focus on .+ in ZIP \d{5} this week/i.test(summary.targeting.recommendation) && (
                 <div style={{
                   background: 'linear-gradient(135deg, rgba(52,211,153,.10) 0%, #101816 100%)',
                   border: '1px solid #34d39940',
@@ -725,7 +728,7 @@ export default function Dashboard() {
                   <div>
                     <div style={{ fontSize: 11, color: '#6ee7b7', fontWeight: 600,
                       textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
-                      Smart Targeting
+                      Smart Targeting · {summary.label}
                     </div>
                     <div style={{ fontSize: 14, color: '#e2e8f0' }}>
                       {summary.targeting.recommendation}
