@@ -16,6 +16,7 @@ export const ACTIVATION_EVENTS = [
   'dashboard_viewed',
   'permit_search',
   'permit_drawer_open',
+  'opportunity_queue_viewed',
   'contractor_profile_view',
   'csv_export',
   'saved_lead',
