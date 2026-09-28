@@ -174,6 +174,14 @@ export default function CallList({ scored, topZips, getToken, fixedTrade }:
   };
 
   const list = (scored || []).filter(p => fixedTrade || !tradeFilter || (p.trade || '').toLowerCase() === tradeFilter);
+  useEffect(() => {
+    if (!list.length) return;
+    const first = list[0] || {};
+    track(getToken, 'opportunity_queue_viewed', {
+      county: String(first.county || ''),
+      properties: { opportunity_count: list.length, trade: fixedTrade || tradeFilter || null },
+    });
+  }, [getToken, fixedTrade, tradeFilter, scored]); // one emit per rendered queue/filter state
   const hero = list[0];
   const rest = list.slice(1);
 
