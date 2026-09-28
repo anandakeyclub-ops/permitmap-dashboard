@@ -402,6 +402,10 @@ export default function SavedLeads({ getToken, onBrowse, monthlyPrice }:
                       }}>
                       {STATUSES.map(s => <option key={s} value={s} style={{ background: '#0d1529', color: '#e2e8f0' }}>{s}</option>)}
                     </select>
+                    {l.source_identity?.phone && <a href={`tel:${l.source_identity.phone}`} style={{display:'block',marginTop:6,fontSize:11,color:'#60a5fa',fontWeight:700}}>Call {l.source_identity.phone}</a>}
+                    {l.source_identity?.email && <a href={`mailto:${l.source_identity.email}`} style={{display:'block',marginTop:4,fontSize:11,color:'#60a5fa',fontWeight:700}}>Email source contact</a>}
+                    {!l.source_identity?.phone && !l.source_identity?.email && l.source_identity?.contactability === 'identity_only' && <div style={{marginTop:5,fontSize:10,color:'#94a3b8'}}>Source identity: {l.source_identity.contractor_name || l.source_identity.owner_name || l.source_identity.applicant_name}</div>}
+                    {l.source_identity?.contactability === 'none' && <div style={{marginTop:5,fontSize:10,color:'#64748b'}}>No direct contact in source</div>}
                     {l.status === 'saved' && (
                       <button onClick={() => changeStatus(l, 'called')} disabled={busy}
                         aria-label={`Mark ${l.address || l.county} called`}
@@ -482,6 +486,10 @@ export default function SavedLeads({ getToken, onBrowse, monthlyPrice }:
               </select>
               <span style={{ fontSize: 12, color: '#94a3b8' }}>Score {l.score ?? '—'}</span>
             </div>
+            {l.source_identity?.phone && <a href={`tel:${l.source_identity.phone}`} style={{display:'block',marginBottom:8,color:'#60a5fa',fontSize:12,fontWeight:700}}>Call {l.source_identity.phone}</a>}
+            {l.source_identity?.email && <a href={`mailto:${l.source_identity.email}`} style={{display:'block',marginBottom:8,color:'#60a5fa',fontSize:12,fontWeight:700}}>Email source contact</a>}
+            {!l.source_identity?.phone && !l.source_identity?.email && l.source_identity?.contactability === 'identity_only' && <div style={{marginBottom:8,fontSize:11,color:'#94a3b8'}}>Source identity: {l.source_identity.contractor_name || l.source_identity.owner_name || l.source_identity.applicant_name}</div>}
+            {l.source_identity?.contactability === 'none' && <div style={{marginBottom:8,fontSize:11,color:'#64748b'}}>No direct contact in source</div>}
             {l.status === 'saved' && (
               <button onClick={() => changeStatus(l, 'called')} disabled={pending.has(l.id)}
                 aria-label={`Mark ${l.address || l.county} called`}
