@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bookmark, Trash2, Target } from 'lucide-react';
 import {
   getSavedLeads, updateSavedLead, deleteSavedLead, type GetToken,
@@ -54,13 +54,22 @@ export default function SavedLeads({ getToken, onBrowse, monthlyPrice }:
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [followUpDrafts, setFollowUpDrafts] = useState<Record<string, string>>({});
+  const viewTracked = useRef(false);
 
   // One fetch on open — never per-row.
   useEffect(() => {
     let cancelled = false;
     setLoading(true); setLocked(false); setErrored(false);
     getSavedLeads(getToken)
-      .then(d => { if (!cancelled) setLeads(d.leads || []); })
+      .then(d => {
+        if (cancelled) return;
+        const loaded = d.leads || [];
+        setLeads(loaded);
+        if (!viewTracked.current) {
+          viewTracked.current = true;
+          track(getToken, 'saved_leads_viewed', { properties: { lead_count: loaded.length } });
+        }
+      })
       .catch(e => {
         if (cancelled) return;
         if (String(e?.message || e).includes('403')) setLocked(true);

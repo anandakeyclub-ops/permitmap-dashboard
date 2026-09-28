@@ -19,6 +19,7 @@ export const ACTIVATION_EVENTS = [
   'contractor_profile_view',
   'csv_export',
   'saved_lead',
+  'saved_leads_viewed',
   'lead_status_changed',
   'lead_followup_scheduled',
   'lead_value_recorded',
