@@ -110,7 +110,12 @@ export default function SavedLeads({ getToken, onBrowse, monthlyPrice }:
     const bOpen = b.status !== 'won' && b.status !== 'lost';
     if (aOpen !== bOpen) return aOpen ? -1 : 1;
     const at = priorityTime(a), bt = priorityTime(b);
+    // Due/overdue dated work stays first. Among undated open leads, untouched `saved` leads are
+    // the next execution debt, ranked by opportunity score so the strongest lead gets worked first.
     if (at !== bt) return at - bt;
+    const aUntouched = aOpen && a.status === 'saved' && !a.follow_up_at;
+    const bUntouched = bOpen && b.status === 'saved' && !b.follow_up_at;
+    if (aUntouched !== bUntouched) return aUntouched ? -1 : 1;
     return (b.score ?? -1) - (a.score ?? -1);
   });
   const today = new Date(); today.setHours(0,0,0,0);
@@ -299,6 +304,13 @@ export default function SavedLeads({ getToken, onBrowse, monthlyPrice }:
       <p style={{ margin: '0 0 18px', fontSize: 13, color: '#64748b' }}>
         {openLeads.length} open {openLeads.length === 1 ? 'lead' : 'leads'} · {leads.length} total — ordered by follow-up urgency, then opportunity score.
       </p>
+
+      {unscheduledCount > 0 && (
+        <div role="status" style={{marginBottom:16,padding:'12px 14px',borderRadius:10,background:'#78350f22',border:'1px solid #f59e0b55',color:'#fde68a',fontSize:12,lineHeight:1.5}}>
+          <strong>{unscheduledCount} open lead{unscheduledCount===1?' has':'s have'} no next touch scheduled.</strong>{' '}
+          Start with the highest-ranked unscheduled lead below: mark the call outcome, then schedule the next follow-up before moving on.
+        </div>
+      )}
 
       {/* Execution health: surface work that can leak revenue before pipeline taxonomy. */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(155px,1fr))',gap:10,marginBottom:18}}>
