@@ -13,16 +13,18 @@ export default function TodayCommandCenter({getToken,scoredCount,tradeLabel,mark
   const due=open.filter(l=>l.follow_up_at&&new Date(l.follow_up_at)>=start&&new Date(l.follow_up_at)<end).length;
   const quotes=open.filter(l=>l.status==='quoted'),quoteValue=quotes.reduce((s,l)=>s+(l.quoted_amount||0),0);
   const won=leads.filter(l=>l.status==='won').reduce((s,l)=>s+(l.won_amount||0),0);
-  return {overdue,due,quotes:quotes.length,quoteValue,won,open:open.length};},[leads]);
+  const unscheduled=open.filter(l=>!l.follow_up_at).length;
+  return {overdue,due,unscheduled,quotes:quotes.length,quoteValue,won,open:open.length};},[leads]);
  const money=(n:number)=>'$'+n.toLocaleString(undefined,{maximumFractionDigits:0});
  const urgent=x.overdue+x.due;
+ const needsNextAction=urgent+x.unscheduled;
  const lens=tradeLabel&&marketLabel?`${tradeLabel.replace(/\b\w/g,c=>c.toUpperCase())} · ${marketLabel}`:marketLabel||'';
- const headline=urgent>0?`${urgent} follow-up${urgent===1?'':'s'} need attention`:scoredCount>0?`${scoredCount} ranked opportunities ready to review`:'No qualifying opportunities in the current lens';
- const sub=urgent>0?'Protect the leads you already earned before chasing the next one.':scoredCount>0?`Ranked for ${lens||'your selected market'} — start with the highest-scoring permit.`:`${lens||'Your selected market'} has no permits meeting the current opportunity threshold. Market Intelligence still shows the broader county.`;
+ const headline=urgent>0?`${urgent} follow-up${urgent===1?'':'s'} need attention`:x.unscheduled>0?`${x.unscheduled} saved lead${x.unscheduled===1?' needs':'s need'} a next action`:scoredCount>0?`${scoredCount} ranked opportunities ready to review`:'No qualifying opportunities in the current lens';
+ const sub=urgent>0?'Protect the leads you already earned before chasing the next one.':x.unscheduled>0?'A saved lead without a follow-up is easy to lose. Schedule the next touch before adding more leads.':scoredCount>0?`Ranked for ${lens||'your selected market'} — start with the highest-scoring permit.`:`${lens||'Your selected market'} has no permits meeting the current opportunity threshold. Market Intelligence still shows the broader county.`;
  return <section aria-label="Today command center" style={{background:'linear-gradient(135deg,rgba(52,211,153,.09),#101816 62%)',border:'1px solid #34d39940',borderRadius:14,padding:'20px 22px',marginBottom:24,boxShadow:'0 14px 34px rgba(0,0,0,.18)'}}>
   <div style={{display:'flex',justifyContent:'space-between',gap:18,alignItems:'flex-start',flexWrap:'wrap',marginBottom:16}}>
    <div style={{maxWidth:650}}><div style={{fontSize:10,fontWeight:850,color:'#34d399',textTransform:'uppercase',letterSpacing:'.12em',marginBottom:5}}>Today · contractor command center</div><strong style={{display:'block',fontSize:21,color:'#f8fafc',letterSpacing:'-.02em',marginBottom:5}}>{headline}</strong><span style={{fontSize:13,color:'#94a3b8',lineHeight:1.5}}>{sub}</span></div>
-   <button onClick={urgent>0?onSaved:onOpportunities} style={{display:'inline-flex',alignItems:'center',gap:7,background:'#34d399',color:'#062018',border:0,borderRadius:8,padding:'10px 15px',fontWeight:800,cursor:'pointer'}}>{urgent>0?'Work follow-ups':'Review opportunities'} <ArrowRight size={14}/></button>
+   <button onClick={needsNextAction>0?onSaved:onOpportunities} style={{display:'inline-flex',alignItems:'center',gap:7,background:'#34d399',color:'#062018',border:0,borderRadius:8,padding:'10px 15px',fontWeight:800,cursor:'pointer'}}>{urgent>0?'Work follow-ups':'Review opportunities'} <ArrowRight size={14}/></button>
   </div>
   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(155px,1fr))',gap:10}}>
    <Metric icon={x.overdue>0?AlertTriangle:CheckCircle2} value={String(x.overdue)} label="Overdue follow-ups" hot={x.overdue>0} onClick={onSaved}/>
