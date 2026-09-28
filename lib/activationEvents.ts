@@ -24,6 +24,7 @@ export const ACTIVATION_EVENTS = [
   'lead_status_changed',
   'lead_followup_scheduled',
   'lead_value_recorded',
+  'billing_management_reason',
 ] as const;
 
 export type ActivationEvent = (typeof ACTIVATION_EVENTS)[number];

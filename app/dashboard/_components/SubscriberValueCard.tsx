@@ -26,6 +26,7 @@ export default function SubscriberValueCard({
   const [subscription, setSubscription] = useState<SubscriptionSnapshot | null>(null);
   const [activation, setActivation] = useState<ActivationState | null>(null);
   const [portalBusy, setPortalBusy] = useState(false);
+  const [billingReasonOpen, setBillingReasonOpen] = useState(false);
   const [roi, setRoi] = useState<{won:number; quoted:number; worked:number} | null>(null);
 
   useEffect(() => {
@@ -47,7 +48,15 @@ export default function SubscriberValueCard({
     }).catch(() => {});
   }, [getToken]);
 
-  async function manageBilling() {
+  async function manageBilling(reason?: string) {
+    if (reason) {
+      const token = await getToken().catch(() => null);
+      if (token) fetch((process.env.NEXT_PUBLIC_API_URL || 'https://permitmap-api.onrender.com') + '/analytics/event', {
+        method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+        body:JSON.stringify({event_name:'billing_management_reason',properties:{reason}})
+      }).catch(()=>{});
+    }
+    setBillingReasonOpen(false);
     setPortalBusy(true);
     try {
       const r = await fetch('/api/billing-portal', { method: 'POST' });
@@ -100,9 +109,18 @@ export default function SubscriberValueCard({
           </div>}
           {roi && roi.won>0 && subscription?.amount && <div style={{fontSize:11,color:'#94a3b8',lineHeight:1.45,margin:'-4px 0 12px'}}>Tracked won revenue is <strong style={{color:'#86efac'}}>{(roi.won/subscription.amount).toFixed(1)}×</strong> the current monthly subscription amount. This is customer-entered won revenue, not an attribution claim that PermitMap caused the sale.</div>}
           {subscription && (
-            <button onClick={manageBilling} disabled={portalBusy} className="pm-btn-secondary">
-              <CreditCard size={14} /> {portalBusy ? 'Opening…' : 'Manage billing'}
-            </button>
+            <div>
+              <button onClick={() => setBillingReasonOpen(true)} disabled={portalBusy} className="pm-btn-secondary">
+                <CreditCard size={14} /> {portalBusy ? 'Opening…' : 'Manage billing'}
+              </button>
+              {billingReasonOpen && <div style={{marginTop:8,padding:10,border:'1px solid #334155',borderRadius:8,fontSize:11,color:'#94a3b8'}}>
+                <div style={{marginBottom:7,color:'#cbd5e1'}}>Optional: what brings you to billing?</div>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                  {['price','no_value','data_coverage','too_few_leads','not_using','technical_issue'].map(r=><button key={r} className="pm-btn-secondary" onClick={()=>manageBilling(r)}>{r.replace(/_/g,' ')}</button>)}
+                  <button className="pm-btn-secondary" onClick={()=>manageBilling()}>Skip</button>
+                </div>
+              </div>}
+            </div>
           )}
         </div>
 
