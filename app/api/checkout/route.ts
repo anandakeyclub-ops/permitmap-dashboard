@@ -51,6 +51,12 @@ export async function POST(req: NextRequest) {
   // the checkout boundary. Reuse checkout_resume_started so reporting remains additive and the API
   // allowlist/schema do not change. Source distinguishes this authoritative server observation.
   if (userId && plan) {
+    // Durable Clerk-success signal. This is emitted only after auth() resolves a real identity;
+    // unlike the client-side signup_completed event it cannot be lost during Clerk navigation.
+    await emitCheckoutBoundary('signup_authenticated', {
+      user_id: userId, email, plan, source: 'checkout_api_authenticated',
+      properties: { attribution },
+    });
     await emitCheckoutBoundary('checkout_resume_started', {
       user_id: userId, email, plan, source: 'checkout_api_authenticated',
     });
