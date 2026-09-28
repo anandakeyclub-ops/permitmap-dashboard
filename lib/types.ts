@@ -26,6 +26,14 @@ export interface SavedLead {
   follow_up_at?: string | null; // contractor-entered next-action timestamp; optional during rolling API deploy
   saved_at: string;             // ISO timestamp
   updated_at: string;           // ISO timestamp
+  source_identity?: {
+    contactability: 'direct' | 'identity_only' | 'none';
+    phone: string | null;
+    email: string | null;
+    owner_name: string | null;
+    contractor_name: string | null;
+    applicant_name: string | null;
+  };
 }
 
 // Per-stage pipeline totals returned alongside the lead list (always full-pipeline,
