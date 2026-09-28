@@ -402,6 +402,14 @@ export default function SavedLeads({ getToken, onBrowse, monthlyPrice }:
                       }}>
                       {STATUSES.map(s => <option key={s} value={s} style={{ background: '#0d1529', color: '#e2e8f0' }}>{s}</option>)}
                     </select>
+                    {l.status === 'saved' && (
+                      <button onClick={() => changeStatus(l, 'called')} disabled={busy}
+                        aria-label={`Mark ${l.address || l.county} called`}
+                        style={{display:'block',marginTop:7,background:'#2563eb',color:'#fff',border:'none',
+                          borderRadius:6,padding:'6px 10px',fontSize:11,fontWeight:800,cursor:busy?'wait':'pointer'}}>
+                        I called this lead
+                      </button>
+                    )}
                     {l.status === 'called' && !l.follow_up_at && <div style={{marginTop:5,fontSize:10,color:'#fcd34d',fontWeight:700}}>Next: schedule follow-up</div>}
                     {l.status === 'quoted' && !l.quoted_amount && <div style={{marginTop:5,fontSize:10,color:'#fcd34d',fontWeight:700}}>Next: enter quote $</div>}
                     {l.status === 'won' && !l.won_amount && <div style={{marginTop:5,fontSize:10,color:'#86efac',fontWeight:700}}>Next: enter won $</div>}
@@ -474,6 +482,14 @@ export default function SavedLeads({ getToken, onBrowse, monthlyPrice }:
               </select>
               <span style={{ fontSize: 12, color: '#94a3b8' }}>Score {l.score ?? '—'}</span>
             </div>
+            {l.status === 'saved' && (
+              <button onClick={() => changeStatus(l, 'called')} disabled={pending.has(l.id)}
+                aria-label={`Mark ${l.address || l.county} called`}
+                style={{width:'100%',marginBottom:10,background:'#2563eb',color:'#fff',border:'none',
+                  borderRadius:7,padding:'10px 12px',fontSize:13,fontWeight:800,cursor:pending.has(l.id)?'wait':'pointer'}}>
+                I called this lead
+              </button>
+            )}
             {(l.status === 'quoted' || l.status === 'won') && (
               <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 10 }}>
                 {l.status === 'won' ? 'Won revenue' : 'Quote'} $
