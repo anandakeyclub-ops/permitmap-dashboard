@@ -2,10 +2,16 @@
 // download trigger lives in the component (keeps this module unit-testable). The caller passes
 // the SAME already-filtered/authorized rows that are visible on screen; export never fetches.
 
-// Export columns, in order. `keys` are candidate field names on the raw API permit object
-// (UPPER_SNAKE, with lowercase fallbacks). Only these public fields are exported — no hidden/
-// internal fields (score, trade colors, ids, etc.).
-const COLUMNS: { header: string; keys: string[]; date?: boolean }[] = [
+import { effectivePermitDate, type DateBasis } from './dateBasis';
+
+// Options: the county's date dimension, so the date column header + value are correct
+// (e.g. "Record opened" + OPENED_DATE for Citrus). Omitted → issued basis / "Issue Date"
+// (back-compatible with existing callers/tests).
+export interface CsvOptions { dateBasis?: DateBasis | string; dateLabel?: string; }
+
+// Non-date columns, in order. The date column is inserted after Status at build time so its
+// header/value adapt to the county's date basis (never hardcoded to an issue date).
+const PRE_DATE_COLUMNS: { header: string; keys: string[] }[] = [
   { header: 'Permit Number', keys: ['PERMITNO', 'permit_no', 'permit_number', 'permit_id'] },
   { header: 'County', keys: ['county', 'COUNTY'] },
   { header: 'Address', keys: ['FULL_ADDRESS', 'full_address', 'address'] },
@@ -15,7 +21,8 @@ const COLUMNS: { header: string; keys: string[]; date?: boolean }[] = [
   { header: 'Work Description', keys: ['WORK_DESCRIPTION', 'work_description'] },
   { header: 'Trade', keys: ['trade', 'TRADE'] },
   { header: 'Status', keys: ['STATUS', 'status'] },
-  { header: 'Issue Date', keys: ['LAST_ISSUED_DATE', 'last_issued_date', 'permit_date', 'issue_date'], date: true },
+];
+const POST_DATE_COLUMNS: { header: string; keys: string[] }[] = [
   { header: 'Valuation', keys: ['FINAL_VALUATION', 'final_valuation', 'value', 'valuation'] },
 ];
 
@@ -53,20 +60,35 @@ export function escapeCsvField(raw: any): string {
   return s;
 }
 
-/** Serialize authorized/filtered permit rows to CSV text (UTF-8, CRLF line endings). Pure. */
-export function buildPermitCsv(rows: Record<string, any>[]): string {
-  const header = COLUMNS.map(c => escapeCsvField(c.header)).join(',');
-  const body = (rows || []).map(row =>
-    COLUMNS.map(c => {
-      const v = c.date ? formatDate(pick(row, c.keys)) : pick(row, c.keys);
-      return escapeCsvField(v);
-    }).join(','),
-  );
+/** The date column header for a given basis/label (defaults to the back-compat "Issue Date"). */
+function dateHeader(opts?: CsvOptions): string {
+  return (opts?.dateLabel && opts.dateLabel.trim()) ? opts.dateLabel.trim() : 'Issue Date';
+}
+
+/** Serialize authorized/filtered permit rows to CSV text (UTF-8, CRLF). Pure. The date column
+ *  header + value follow the county's date basis (opts); omitted → issued / "Issue Date". */
+export function buildPermitCsv(rows: Record<string, any>[], opts?: CsvOptions): string {
+  const basis = opts?.dateBasis || 'issued';
+  const headers = [...PRE_DATE_COLUMNS.map(c => c.header), dateHeader(opts), ...POST_DATE_COLUMNS.map(c => c.header)];
+  const header = headers.map(escapeCsvField).join(',');
+  const body = (rows || []).map(row => {
+    const cells = [
+      ...PRE_DATE_COLUMNS.map(c => pick(row, c.keys)),
+      formatDate(effectivePermitDate(row, basis)),
+      ...POST_DATE_COLUMNS.map(c => pick(row, c.keys)),
+    ];
+    return cells.map(escapeCsvField).join(',');
+  });
   return [header, ...body].join('\r\n');
 }
 
-/** Header names in export order — exposed for tests. */
-export const CSV_HEADERS = COLUMNS.map(c => c.header);
+/** Header names in export order for a given date label — exposed for tests/UI. */
+export function csvHeaders(dateLabel = 'Issue Date'): string[] {
+  return [...PRE_DATE_COLUMNS.map(c => c.header), dateLabel, ...POST_DATE_COLUMNS.map(c => c.header)];
+}
+
+/** Back-compat default headers (issued basis / "Issue Date"). */
+export const CSV_HEADERS = csvHeaders();
 
 function slug(s?: string): string {
   return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
