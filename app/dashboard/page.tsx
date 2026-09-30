@@ -12,6 +12,8 @@ import {
   effectiveRange, isValidCustomRange, formatHuman, type DatePreset, type DateRange,
 } from '../../lib/dateRange';
 import { buildPermitCsv, createExportFilename } from '../../lib/csv';
+import { tradeColor, tradeOptions } from '../../lib/trades';
+import { effectivePermitDate, dateLabel as coverageDateLabel } from '../../lib/dateBasis';
 import { sortPermits, SORT_OPTIONS, nextSortForColumn, sortIndicatorForColumn, type SortOption, type SortColumn } from '../../lib/sort';
 import { INITIAL_VISIBLE, shownCount, shouldShowLoadMore, nextVisibleCount } from '../../lib/tableView';
 import { isCountyLocked, defaultEntitledCounty, upgradeMessageForCounty } from '../../lib/entitlement';
@@ -53,16 +55,6 @@ const TIER_LIMITS: Record<string, { counties: number; permits: number; label: st
   starter: { counties: 1, permits: 50,  label: 'Starter' },
   pro:     { counties: 5, permits: 500, label: 'Pro' },
   team:    { counties: 99, permits: 9999, label: 'Team' },
-};
-
-const TRADE_COLORS: Record<string, string> = {
-  roofing:            '#ef4444',
-  hvac:               '#f97316',
-  electrical:         '#eab308',
-  plumbing:           '#3b82f6',
-  pool:               '#06b6d4',
-  solar:              '#22c55e',
-  general_contractor: '#8b5cf6',
 };
 
 const SCORE_COLOR = (s: number) =>
@@ -433,13 +425,15 @@ export default function Dashboard() {
   // array feeds the visible rows AND the CSV export so on-screen order matches the file.
   // Default ('') preserves the current server-returned order. Pure; never mutates/​fetches.
   const displayedPermits = sortPermits(tradeFilteredPermits, sortOption);
+  const permitDateLabel = coverage ? coverageDateLabel(coverage) : 'Date';
+  const permitDateBasis = coverage?.date_basis;
 
   // Export exactly the currently-visible (filtered + sorted + entitlement-authorized) rows. CSV
   // serialization is pure (lib/csv); only the browser download trigger lives here. Never
   // fetches or introduces additional records.
   const exportCsv = () => {
     if (displayedPermits.length === 0) return;
-    const csv = buildPermitCsv(displayedPermits);
+    const csv = buildPermitCsv(displayedPermits, coverage ? { dateBasis: coverage.date_basis, dateLabel: coverage.date_label } : undefined);
     const filename = createExportFilename(
       { county, trade: tradeFilter, keyword: search },
       new Date().toISOString().slice(0, 10),
@@ -461,14 +455,14 @@ export default function Dashboard() {
         .map(([trade, count]) => ({
           trade: trade.replace('_', ' '),
           count: Number(count) || 0,
-          fill: TRADE_COLORS[trade] || '#6b7280',
+          fill: tradeColor(trade),
         }))
         .sort((a, b) => b.count - a.count)
     : [];
   // Historical intelligence derived only from the currently authorized permit rows. We do not
   // claim a comparison when either adjacent 30-day window is incomplete or absent.
   const permitDate = (p: any) => {
-    const raw = p.LAST_ISSUED_DATE ?? p.last_issued_date ?? p.ISSUED_DATE ?? p.issued_date;
+    const raw = effectivePermitDate(p, permitDateBasis);
     const d = raw ? new Date(raw) : null;
     return d && !Number.isNaN(d.getTime()) ? d : null;
   };
@@ -787,6 +781,7 @@ export default function Dashboard() {
                     topZips={(summary?.targeting?.top_zips || []).map((z: any) => String(z.zip))}
                     getToken={getToken}
                     fixedTrade={primaryTrade || undefined}
+                    dateBasis={permitDateBasis}
                   />
                 </div>
               )}
@@ -799,12 +794,12 @@ export default function Dashboard() {
                 <>
                   {/* Trade filter */}
                   <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-                    {['', 'roofing', 'hvac', 'electrical', 'plumbing', 'pool', 'solar', 'general_contractor'].map(t => (
+                    {tradeOptions(permits.map(p => p.trade as string)).map(t => (
                       <button key={t} onClick={() => setTradeFilter(t)} style={{
                         padding: '5px 12px', borderRadius: 20,
-                        border: `1px solid ${tradeFilter === t ? (TRADE_COLORS[t] || '#3b82f6') : '#1e293b'}`,
-                        background: tradeFilter === t ? `${TRADE_COLORS[t] || '#34d399'}20` : 'transparent',
-                        color: tradeFilter === t ? (TRADE_COLORS[t] || '#3b82f6') : '#64748b',
+                        border: `1px solid ${tradeFilter === t ? (t ? tradeColor(t) : '#3b82f6') : '#1e293b'}`,
+                        background: tradeFilter === t ? `${t ? tradeColor(t) : '#34d399'}20` : 'transparent',
+                        color: tradeFilter === t ? (t ? tradeColor(t) : '#3b82f6') : '#64748b',
                         fontSize: 12, fontWeight: 600, cursor: 'pointer',
                         textTransform: 'capitalize',
                       }}>
@@ -955,7 +950,7 @@ export default function Dashboard() {
                             { label: 'Type' },
                             { label: 'Trade' },
                             { label: 'Value', column: 'value' as SortColumn },
-                            { label: 'Date', column: 'date' as SortColumn },
+                            { label: permitDateLabel, column: 'date' as SortColumn },
                           ]).map(h => {
                             const thStyle = {
                               padding: '12px 16px', textAlign: 'left' as const,
@@ -1029,8 +1024,8 @@ export default function Dashboard() {
                               <span style={{
                                 fontSize: 11, fontWeight: 600, padding: '3px 8px',
                                 borderRadius: 4, textTransform: 'capitalize',
-                                background: `${TRADE_COLORS[p.trade] || '#475569'}20`,
-                                color: TRADE_COLORS[p.trade] || '#94a3b8',
+                                background: `${tradeColor(p.trade)}20`,
+                                color: tradeColor(p.trade),
                               }}>{(p.trade || '').replace('_', ' ')}</span>
                             </td>
                             <td style={{ padding: '12px 16px', fontSize: 13,
@@ -1042,7 +1037,7 @@ export default function Dashboard() {
                                 : '—'}
                             </td>
                             <td style={{ padding: '12px 16px', fontSize: 12, color: '#64748b' }}>
-                              {p.LAST_ISSUED_DATE || p.last_issued_date || '—'}
+                              {effectivePermitDate(p, permitDateBasis) || '—'}
                             </td>
                           </tr>
                         ))}
@@ -1307,6 +1302,8 @@ export default function Dashboard() {
           saving={savingLeadId === saveLeadPermitId(selectedPermit)}
           saveError={saveLeadError}
           onSaveLead={() => handleSaveLead(selectedPermit)}
+          dateLabel={coverage?.date_label}
+          dateBasis={permitDateBasis}
           onClose={() => { setSelectedPermit(null); setFocusContractorBtn(false); rowRef.current?.focus(); }}
         />
       )}

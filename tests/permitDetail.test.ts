@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PERMIT_DETAIL_FIELDS, formatPermitField, NOT_PROVIDED, isNotProvided } from '../lib/permitDetail';
+import { PERMIT_DETAIL_FIELDS, permitDetailFields, formatPermitField, NOT_PROVIDED, isNotProvided } from '../lib/permitDetail';
 
 // Alachua-shaped (rich): owner/contractor/valuation present; no RECORD_TYPE/STATUS at source.
 const alachua = {
@@ -56,6 +56,50 @@ describe('formatPermitField — Marion (EnerGov, no owner/contractor/valuation) 
     expect(drawer(marion, 'Contractor')).toBe(NOT_PROVIDED);
     expect(drawer(marion, 'Valuation')).toBe(NOT_PROVIDED);
     expect(isNotProvided(drawer(marion, 'Owner'))).toBe(true);
+  });
+});
+
+describe('permitDetailFields — date basis awareness (PRC)', () => {
+  // Citrus-shaped: opened-date basis, no issue date. The drawer's date row must show the API's
+  // label ("Record opened") and read OPENED_DATE — never a blank issue date, never opened-as-issued.
+  const citrus = {
+    PERMITNO: 'REM-2026-00042', county: 'citrus', trade: 'generator',
+    OPENED_DATE: '2026-07-01', FULL_ADDRESS: '9 Gulf Blvd, Crystal River',
+  };
+  const fieldFor = (fields: ReturnType<typeof permitDetailFields>, keyPresent: string) =>
+    fields.find(f => f.keys.includes(keyPresent));
+
+  it('opened basis: the date row is labeled from coverage.date_label and reads OPENED_DATE', () => {
+    const fields = permitDetailFields({ dateBasis: 'opened', dateLabel: 'Record opened' });
+    const dateField = fields.find(f => f.keys.includes('OPENED_DATE'))!;
+    expect(dateField.label).toBe('Record opened');
+    expect(formatPermitField(citrus, dateField, NOT_PROVIDED)).toBe('2026-07-01');
+    // No stale "Issue Date" row remains, and no issue-date key leaks into the date field.
+    expect(fields.map(f => f.label)).not.toContain('Issue Date');
+    expect(dateField.keys).not.toContain('LAST_ISSUED_DATE');
+  });
+
+  it('opened basis with no explicit label falls back to "Record opened"', () => {
+    const fields = permitDetailFields({ dateBasis: 'opened' });
+    expect(fields.find(f => f.keys.includes('OPENED_DATE'))!.label).toBe('Record opened');
+  });
+
+  it('omitted opts → issued basis: date row reads LAST_ISSUED_DATE, labeled from the basis default', () => {
+    const fields = permitDetailFields();
+    // Same field set/order as the static spec (only the date row's label is metadata-derived).
+    expect(fields.map(f => f.keys)).toEqual(PERMIT_DETAIL_FIELDS.map(f => f.keys));
+    const dateField = fields.find(f => f.keys.includes('LAST_ISSUED_DATE'))!;
+    expect(dateField.keys).toContain('LAST_ISSUED_DATE');
+    // No explicit label → the issued-basis default ("Permit issued"), never a hardcoded "Issue Date".
+    expect(dateField.label).toBe('Permit issued');
+    void fieldFor; // (helper kept for readability; unused branch)
+  });
+
+  it('opened basis does NOT fabricate a date for a row that only has an issue date', () => {
+    const issuedOnly = { LAST_ISSUED_DATE: '2026-07-27' };
+    const fields = permitDetailFields({ dateBasis: 'opened', dateLabel: 'Record opened' });
+    const dateField = fields.find(f => f.keys.includes('OPENED_DATE'))!;
+    expect(formatPermitField(issuedOnly, dateField, NOT_PROVIDED)).toBe(NOT_PROVIDED);
   });
 });
 

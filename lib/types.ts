@@ -56,6 +56,8 @@ export interface PermitRow {
   final_valuation?: string | number;
   LAST_ISSUED_DATE?: string;
   last_issued_date?: string;
+  OPENED_DATE?: string;
+  opened_date?: string;
   PERMIT_DESCRIPTION?: string;
   permit_description?: string;
   RECORD_TYPE?: string;

@@ -5,19 +5,14 @@ import { Target, MapPin, Clock, DollarSign, Flame, TrendingUp, ChevronRight, Sta
 import { getSavedLeads, saveLead, type GetToken } from '../../../lib/api';
 import { track } from '../../../lib/analytics';
 import { savedLeadEvent } from '../../../lib/activationEvents';
+import { tradeColor, tradeOptions, HIGH_DEMAND } from '../../../lib/trades';
+import { effectivePermitDate } from '../../../lib/dateBasis';
 
 // ── Phase A: "Best Opportunities This Week" — ranked pursuit queue + explainability.
 // Data source: /permits/scored (already sorted by score desc, score>=50, tier-capped).
 // No new API: the "Why this opportunity?" chips are derived from the SAME inputs the
 // API scorer uses (project value, recency, trade demand) plus the hot-ZIP signal that
 // already ships in /summary -> targeting.top_zips.
-
-const TRADE_COLORS: Record<string, string> = {
-  roofing: '#ef4444', hvac: '#f97316', electrical: '#eab308', plumbing: '#3b82f6',
-  pool: '#06b6d4', solar: '#22c55e', general_contractor: '#8b5cf6',
-};
-// Trades the API scorer weights highest (>=14 pts) — i.e. strongest demand signal.
-const HIGH_DEMAND = new Set(['roofing', 'hvac', 'pool', 'solar']);
 
 const scoreColor = (s: number) =>
   s >= 80 ? '#22c55e' : s >= 60 ? '#f97316' : s >= 40 ? '#eab308' : '#6b7280';
@@ -50,14 +45,15 @@ function fmtAge(raw: any): string {
 type Reason = { icon: any; label: string; sub?: string };
 
 // Derive "Why this opportunity?" from existing fields + the hot-ZIP set from /summary.
-function deriveReasons(p: any, hotZips: Set<string>): Reason[] {
+function deriveReasons(p: any, hotZips: Set<string>, dateBasis?: string | null): Reason[] {
   const reasons: Reason[] = [];
   const val = parseVal(p.FINAL_VALUATION ?? p.final_valuation);
   if (val >= 50000) reasons.push({ icon: DollarSign, label: 'High project value', sub: fmtVal(val) });
   else if (val >= 25000) reasons.push({ icon: DollarSign, label: 'Above-average value', sub: fmtVal(val) });
 
-  const age = ageDays(p.LAST_ISSUED_DATE ?? p.last_issued_date);
-  if (age !== null && age <= 7) reasons.push({ icon: Clock, label: 'Recently filed', sub: fmtAge(p.LAST_ISSUED_DATE ?? p.last_issued_date) });
+  const permitDate = effectivePermitDate(p, dateBasis);
+  const age = ageDays(permitDate);
+  if (age !== null && age <= 7) reasons.push({ icon: Clock, label: 'Recently filed', sub: fmtAge(permitDate) });
 
   const trade = (p.trade || '').toLowerCase();
   if (HIGH_DEMAND.has(trade)) reasons.push({ icon: TrendingUp, label: 'High-demand trade' });
@@ -120,8 +116,8 @@ function SaveStar({ saved, saving, onClick }: { saved: boolean; saving: boolean;
   );
 }
 
-export default function CallList({ scored, topZips, getToken, fixedTrade }:
-  { scored: any[]; topZips: string[]; getToken: GetToken; fixedTrade?: string }) {
+export default function CallList({ scored, topZips, getToken, fixedTrade, dateBasis }:
+  { scored: any[]; topZips: string[]; getToken: GetToken; fixedTrade?: string; dateBasis?: string | null }) {
   const [tradeFilter, setTradeFilter] = useState('');
   const hotZips = new Set((topZips || []).map(z => String(z).trim()));
 
@@ -209,20 +205,20 @@ export default function CallList({ scored, topZips, getToken, fixedTrade }:
           filters that imply other trades are present; Permit Search is the cross-trade exploration surface. */}
       {fixedTrade ? (
         <div style={{ display:'inline-flex', alignItems:'center', gap:7, marginBottom:18, padding:'6px 10px',
-          borderRadius:999, background:`${TRADE_COLORS[fixedTrade] || '#34d399'}18`,
-          border:`1px solid ${TRADE_COLORS[fixedTrade] || '#34d399'}55`, color:'#cbd5e1',
+          borderRadius:999, background:`${tradeColor(fixedTrade)}18`,
+          border:`1px solid ${tradeColor(fixedTrade)}55`, color:'#cbd5e1',
           fontSize:12, fontWeight:700, textTransform:'capitalize' }}>
-          <Target size={13} color={TRADE_COLORS[fixedTrade] || '#34d399'} />
+          <Target size={13} color={tradeColor(fixedTrade)} />
           {fixedTrade.replace('_',' ')} pursuit queue
         </div>
       ) : (
         <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
-          {['', 'roofing', 'hvac', 'electrical', 'plumbing', 'pool', 'solar', 'general_contractor'].map(t => (
+          {tradeOptions((scored || []).map(p => p.trade as string)).map(t => (
             <button key={t} onClick={() => setTradeFilter(t)} style={{
               padding: '5px 12px', borderRadius: 20,
-              border: `1px solid ${tradeFilter === t ? (TRADE_COLORS[t] || '#34d399') : '#23312d'}`,
-              background: tradeFilter === t ? `${TRADE_COLORS[t] || '#34d399'}20` : 'transparent',
-              color: tradeFilter === t ? (TRADE_COLORS[t] || '#34d399') : '#64748b',
+              border: `1px solid ${tradeFilter === t ? (t ? tradeColor(t) : '#34d399') : '#23312d'}`,
+              background: tradeFilter === t ? `${t ? tradeColor(t) : '#34d399'}20` : 'transparent',
+              color: tradeFilter === t ? (t ? tradeColor(t) : '#34d399') : '#64748b',
               fontSize: 12, fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize',
             }}>{t ? t.replace('_', ' ') : 'All Trades'}</button>
           ))}
@@ -258,10 +254,10 @@ export default function CallList({ scored, topZips, getToken, fixedTrade }:
                   {(hero.OWNER_NAME || hero.owner_name) &&
                     <span>Owner: <span style={{ color: '#e2e8f0' }}>{hero.OWNER_NAME || hero.owner_name}</span></span>}
                   <span style={{ textTransform: 'capitalize',
-                    color: TRADE_COLORS[(hero.trade || '').toLowerCase()] || '#94a3b8' }}>
+                    color: tradeColor(hero.trade) }}>
                     {(hero.trade || '').replace('_', ' ')}</span>
                   <span style={{ color: '#22c55e', fontWeight: 600 }}>{fmtVal(hero.FINAL_VALUATION ?? hero.final_valuation)}</span>
-                  <span><Clock size={12} style={{ verticalAlign: 'middle' }} /> {fmtAge(hero.LAST_ISSUED_DATE ?? hero.last_issued_date)}</span>
+                  <span><Clock size={12} style={{ verticalAlign: 'middle' }} /> {fmtAge(effectivePermitDate(hero, dateBasis))}</span>
                   {(hero.ZIP || hero.zip) && <span><MapPin size={12} style={{ verticalAlign: 'middle' }} /> {hero.ZIP || hero.zip}</span>}
                 </div>
                 {(hero.PERMIT_DESCRIPTION || hero.permit_description) && (
@@ -274,7 +270,7 @@ export default function CallList({ scored, topZips, getToken, fixedTrade }:
                   Why this opportunity?
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {deriveReasons(hero, hotZips).map((r, i) => <ReasonChip key={i} r={r} />)}
+                  {deriveReasons(hero, hotZips, dateBasis).map((r, i) => <ReasonChip key={i} r={r} />)}
                 </div>
               </div>
             </div>
@@ -301,14 +297,14 @@ export default function CallList({ scored, topZips, getToken, fixedTrade }:
                   </div>
                   <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>
                     <span style={{ textTransform: 'capitalize',
-                      color: TRADE_COLORS[(p.trade || '').toLowerCase()] || '#94a3b8' }}>
+                      color: tradeColor(p.trade) }}>
                       {(p.trade || '').replace('_', ' ')}</span>
                     <span style={{ color: '#22c55e', fontWeight: 600 }}>{fmtVal(p.FINAL_VALUATION ?? p.final_valuation)}</span>
-                    <span>{fmtAge(p.LAST_ISSUED_DATE ?? p.last_issued_date)}</span>
+                    <span>{fmtAge(effectivePermitDate(p, dateBasis))}</span>
                     {(p.ZIP || p.zip) && <span>ZIP {p.ZIP || p.zip}</span>}
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {deriveReasons(p, hotZips).map((r, j) => <ReasonChip key={j} r={r} />)}
+                    {deriveReasons(p, hotZips, dateBasis).map((r, j) => <ReasonChip key={j} r={r} />)}
                   </div>
                 </div>
                 <SaveStar {...starProps(p)} />

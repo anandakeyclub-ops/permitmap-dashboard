@@ -82,6 +82,34 @@ describe('buildPermitCsv', () => {
   });
 });
 
+describe('buildPermitCsv — date basis awareness (PRC)', () => {
+  // Citrus-shaped: opened-date basis. The header + value must follow the API-declared basis —
+  // "Record opened" from OPENED_DATE — never a hardcoded "Issue Date" or a blank issue column.
+  // Address is comma-free so a naive split(',') indexes columns correctly in these assertions.
+  const citrusRow = () => [{
+    PERMITNO: 'REM-2026-00042', county: 'citrus', FULL_ADDRESS: '9 Gulf Blvd Crystal River',
+    trade: 'generator', STATUS: 'Open', OPENED_DATE: '2026-07-01', FINAL_VALUATION: '22000',
+  }];
+
+  it('uses coverage.date_label for the date header and OPENED_DATE for the value on an opened county', () => {
+    const csv = buildPermitCsv(citrusRow(), { dateBasis: 'opened', dateLabel: 'Record opened' });
+    const lines = csv.split('\r\n');
+    expect(lines[0]).toBe(
+      'Permit Number,County,Address,Owner,Contractor,Description,Work Description,Trade,Status,Record opened,Valuation',
+    );
+    // The date cell (10th column, index 9) is the OPENED_DATE, formatted — not blank, not an issue date.
+    expect(lines[1].split(',')[9]).toBe('2026-07-01');
+  });
+
+  it('does not fabricate an issue date for an opened-only row exported under the default (issued) basis', () => {
+    // No opts → issued basis. The row has no issue date, so the date cell is blank (never cross-copied).
+    const csv = buildPermitCsv(citrusRow());
+    const lines = csv.split('\r\n');
+    expect(lines[0]).toContain(',Issue Date,'); // back-compat default header
+    expect(lines[1].split(',')[9]).toBe('');     // blank, not the opened date
+  });
+});
+
 describe('formatDate (consistent formatting)', () => {
   it('normalizes ISO and US formats to YYYY-MM-DD; passes through otherwise', () => {
     expect(formatDate('2026-07-27')).toBe('2026-07-27');
