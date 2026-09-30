@@ -14,13 +14,6 @@ import { effectivePermitDate } from '../../../lib/dateBasis';
 // API scorer uses (project value, recency, trade demand) plus the hot-ZIP signal that
 // already ships in /summary -> targeting.top_zips.
 
-const TRADE_COLORS: Record<string, string> = {
-  roofing: '#ef4444', hvac: '#f97316', electrical: '#eab308', plumbing: '#3b82f6',
-  pool: '#06b6d4', solar: '#22c55e', general_contractor: '#8b5cf6',
-};
-// Trades the API scorer weights highest (>=14 pts) — i.e. strongest demand signal.
-const HIGH_DEMAND = new Set(['roofing', 'hvac', 'pool', 'solar']);
-
 const scoreColor = (s: number) =>
   s >= 80 ? '#22c55e' : s >= 60 ? '#f97316' : s >= 40 ? '#eab308' : '#6b7280';
 
