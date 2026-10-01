@@ -28,6 +28,10 @@ export default function TodayCommandCenter({getToken,scoredCount,tradeLabel,mark
    <div style={{maxWidth:650}}><div style={{fontSize:10,fontWeight:850,color:'#34d399',textTransform:'uppercase',letterSpacing:'.12em',marginBottom:5}}>Today · contractor command center</div><strong style={{display:'block',fontSize:21,color:'#f8fafc',letterSpacing:'-.02em',marginBottom:5}}>{headline}</strong><span style={{fontSize:13,color:'#94a3b8',lineHeight:1.5}}>{sub}</span></div>
    <button onClick={needsNextAction>0?onSaved:onOpportunities} style={{display:'inline-flex',alignItems:'center',gap:7,background:'#34d399',color:'#062018',border:0,borderRadius:8,padding:'10px 15px',fontWeight:800,cursor:'pointer'}}>{urgent>0?'Work follow-ups':'Review opportunities'} <ArrowRight size={14}/></button>
   </div>
+  {bestUntouched&&<div style={{background:'#0c1211',border:'1px solid #34d39955',borderRadius:10,padding:'13px 14px',marginBottom:14,display:'flex',justifyContent:'space-between',gap:14,alignItems:'center',flexWrap:'wrap'}}>
+   <div><div style={{fontSize:10,fontWeight:800,color:'#6ee7b7',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>Work your strongest saved lead</div><strong style={{color:'#f8fafc',fontSize:14}}>{bestUntouched.address||bestUntouched.county}</strong><div style={{fontSize:11,color:'#94a3b8',marginTop:4}}>{bestUntouched.trade||'Permit opportunity'}{bestUntouched.score!=null?` · score ${bestUntouched.score}`:''}</div></div>
+   <button onClick={markCalled} disabled={!!working} style={{background:'#2563eb',color:'#fff',border:0,borderRadius:8,padding:'9px 13px',fontWeight:800,cursor:working?'wait':'pointer'}}>{working?'Saving…':'I called this lead'}</button>
+  </div>}
   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(155px,1fr))',gap:10}}>
    <Metric icon={x.overdue>0?AlertTriangle:CheckCircle2} value={String(x.overdue)} label="Overdue follow-ups" hot={x.overdue>0} onClick={onSaved}/>
    <Metric icon={CalendarClock} value={String(x.due)} label="Due today" hot={x.due>0} onClick={onSaved}/>
