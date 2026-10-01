@@ -5,7 +5,8 @@ import { getSavedLeads, updateSavedLead, type GetToken } from '../../../lib/api'
 import type { SavedLead } from '../../../lib/types';
 
 export default function TodayCommandCenter({getToken,scoredCount,tradeLabel,marketLabel,onOpportunities,onSaved}:{getToken:GetToken;scoredCount:number;tradeLabel?:string;marketLabel?:string;onOpportunities:()=>void;onSaved:()=>void}) {
- const [leads,setLeads]=useState<SavedLead[]>([]);\n const [working,setWorking]=useState<string|null>(null);
+ const [leads,setLeads]=useState<SavedLead[]>([]);
+ const [working,setWorking]=useState<string|null>(null);
  useEffect(()=>{let dead=false;getSavedLeads(getToken).then(d=>{if(!dead)setLeads(d.leads||[])}).catch(()=>{});return()=>{dead=true}},[getToken]);
  const x=useMemo(()=>{const now=new Date(),start=new Date(now);start.setHours(0,0,0,0);const end=new Date(start);end.setDate(end.getDate()+1);
   const open=leads.filter(l=>l.status!=='won'&&l.status!=='lost');
