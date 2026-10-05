@@ -151,7 +151,7 @@ it('webhook writes selected_counties (not allowed_counties) + completes when cou
 it('webhook migrates a legacy allowed_counties LIST for completion but never writes it back', async () => {
   const s = fakeStripe({ clerk_user_id: 'user_1' });   // no county on this event
   const clerk = fakeClerk({ allowed_counties: ['palm_beach'], selected_trades: ['roofing'] }); // legacy list
-  const body = evt('customer.subscription.updated', { id: 'sub_1', customer: 'cus_1', metadata: { clerk_user_id: 'user_1' }, items: { data: [{ price: { id: 'price_1TMtStIgaDPbFgUVPFOUjBMW' } }] } });
+  const body = evt('customer.subscription.updated', { id: 'sub_1', status: 'active', customer: 'cus_1', metadata: { clerk_user_id: 'user_1' }, items: { data: [{ price: { id: 'price_1TMtStIgaDPbFgUVPFOUjBMW' } }] } });
   const r = await handleWebhook({ stripe: s as any, clerk: clerk as any, body, sig: 'x', secret: 'sec', emit, alert: vi.fn() });
   expect(r.status).toBe(200);
   const payload = (clerk.updateUserMetadata as any).mock.calls[0][1].publicMetadata;

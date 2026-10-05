@@ -27,6 +27,44 @@ export function resolveSelectedCounty(metadata?: Record<string, any> | null): st
   return slug || null;
 }
 
+// ── Entitlement truth ────────────────────────────────────────────────────────────────────────
+// Stripe is the source of truth. Entitlement is derived from the subscription's CURRENT status and
+// price, never from "an event arrived". Unknown prices FAIL CLOSED (no silent fallback to Starter).
+const TIER_RANK: Record<string, number> = { starter: 1, pro: 2, team: 3 };
+
+// Highest known tier among the subscription's items; null when NO item has a known price.
+export function tierForSubscription(sub: any): string | null {
+  let best: string | null = null;
+  for (const it of sub?.items?.data || []) {
+    const t = PRICE_TO_TIER[it?.price?.id || ''];
+    if (t && (!best || TIER_RANK[t] > TIER_RANK[best])) best = t;
+  }
+  return best;
+}
+
+export type EntitlementDecision =
+  | { action: 'grant'; billingStatus: string }
+  | { action: 'revoke'; billingStatus: string }
+  | { action: 'noop'; reason: string };
+
+// trialing → entitled (billing_status stays 'active' exactly as before; the raw Stripe status is
+// recorded separately in stripe_subscription_status). past_due → entitled during Stripe's dunning
+// window but NEVER stamped 'active'. Everything else that is not a paying/trialing state is revoked
+// or ignored. Unknown statuses are ignored (fail closed: they never grant).
+export function entitlementForStatus(status: string | undefined, paused: boolean): EntitlementDecision {
+  switch (status) {
+    case 'trialing':
+    case 'active': return { action: 'grant', billingStatus: paused ? 'paused' : 'active' };
+    case 'past_due': return { action: 'grant', billingStatus: 'past_due' };
+    case 'unpaid': return { action: 'revoke', billingStatus: 'unpaid' };
+    case 'canceled': return { action: 'revoke', billingStatus: 'cancelled' };
+    case 'incomplete_expired': return { action: 'revoke', billingStatus: 'incomplete_expired' };
+    case 'paused': return { action: 'revoke', billingStatus: 'paused' };
+    case 'incomplete': return { action: 'noop', reason: 'incomplete_never_grants' };
+    default: return { action: 'noop', reason: `unknown_status:${status ?? 'undefined'}` };
+  }
+}
+
 // client_reference_id may be a raw Clerk id (server-side checkout) or the legacy token
 // v1_dashboard_upgrade_{userId}_{county}_{plan}_{yyyymmdd}. metadata.clerk_user_id preferred.
 export function resolveClerkUserId(
@@ -56,7 +94,12 @@ export interface ClerkLike {
   };
 }
 export interface StripeLike {
-  subscriptions: { retrieve: (id: string) => Promise<any>; update: (id: string, p: any) => Promise<any> };
+  subscriptions: {
+    retrieve: (id: string) => Promise<any>; update: (id: string, p: any) => Promise<any>;
+    // Optional READ-ONLY lookups used to reconcile duplicate subscriptions. Absent in older mocks.
+    list?: (p: any) => Promise<{ data: any[] }>;
+    search?: (p: any) => Promise<{ data: any[] }>;
+  };
   customers: { retrieve: (id: string) => Promise<any>; update: (id: string, p: any) => Promise<any> };
   webhooks: { constructEvent: (body: string, sig: string, secret: string) => any };
 }
@@ -83,6 +126,33 @@ function isForeignActiveSubscription(pm: Record<string, any> | null, incomingSub
     && !!pm.stripe_subscription_id && pm.stripe_subscription_id !== incomingSubId;
 }
 
+// ── Event idempotency + ordering ─────────────────────────────────────────────────────────────
+// State lives in Clerk publicMetadata (no other store). stripe_event_created is a per-binding
+// watermark; stripe_event_ids is a small ring of recently applied event ids. Both are only compared
+// against events for the SAME subscription that holds the binding.
+const EVENT_ID_RING = 10;
+export type Outcome = 'applied' | 'foreign_duplicate' | 'duplicate_event' | 'stale_event' | 'skipped' | 'revoked' | 'nonbound_ended' | 'promoted';
+export interface EventCtx { eventId?: string | null; eventCreated?: number | null }
+
+function replayGuard(pm: Record<string, any> | null, subId: string, ctx: EventCtx): Outcome | null {
+  if (!pm) return null;
+  if (ctx.eventId && Array.isArray(pm.stripe_event_ids) && pm.stripe_event_ids.includes(ctx.eventId)) return 'duplicate_event';
+  const bound = pm.stripe_subscription_id === subId;
+  if (bound && typeof pm.stripe_event_created === 'number' && typeof ctx.eventCreated === 'number'
+      && ctx.eventCreated < pm.stripe_event_created) return 'stale_event';
+  return null;
+}
+
+function eventMarkers(pm: Record<string, any> | null, ctx: EventCtx, sameBinding: boolean): Record<string, any> {
+  const ids = Array.isArray(pm?.stripe_event_ids) ? [...pm!.stripe_event_ids] : [];
+  if (ctx.eventId && !ids.includes(ctx.eventId)) ids.push(ctx.eventId);
+  const prev = sameBinding && typeof pm?.stripe_event_created === 'number' ? pm!.stripe_event_created : 0;
+  const out: Record<string, any> = { stripe_event_ids: ids.slice(-EVENT_ID_RING) };
+  const created = typeof ctx.eventCreated === 'number' ? Math.max(prev, ctx.eventCreated) : (prev || undefined);
+  if (created !== undefined) out.stripe_event_created = created;
+  return out;
+}
+
 // Write entitlement to a resolved Clerk user — UNLESS a different active subscription is already
 // bound. In that case we protect the original binding, alert, and stamp the duplicate's Stripe
 // objects with the clerk id for traceability (so the Revenue-Integrity sweep can reconcile it).
@@ -90,22 +160,25 @@ function isForeignActiveSubscription(pm: Record<string, any> | null, incomingSub
 async function applyEntitlement(
   stripe: StripeLike, clerk: ClerkLike, alert: Alert, targetUserId: string,
   args: { customerId: string; subId: string; tier: string; email?: string | null }, metadata: Record<string, any>,
-): Promise<void> {
+  ctx: EventCtx = {}, opts: { allowRebind?: boolean } = {},
+): Promise<Outcome> {
   const pm = await readPublicMetadata(clerk, targetUserId);
-  if (isForeignActiveSubscription(pm, args.subId)) {
+  const replay = replayGuard(pm, args.subId, ctx);
+  if (replay) return replay;
+  if (!opts.allowRebind && isForeignActiveSubscription(pm, args.subId)) {
     alert('duplicate_subscription', {
       clerk_user_id: targetUserId, existing_subscription_id: pm!.stripe_subscription_id,
       new_subscription_id: args.subId, customer_id: args.customerId, tier: args.tier,
     });
     await persistMapping(stripe, args.customerId, args.subId, targetUserId); // traceability only
-    return; // do NOT overwrite the original entitlement/binding
+    return 'foreign_duplicate'; // do NOT overwrite the original entitlement/binding
   }
   // P4: (re)compute onboarding_complete from EXISTING selections + this tier — never deleting
   // selections (upgrade may complete it; downgrade over-limit stays incomplete for review). A
   // brand-new paid signup with no selections is stamped onboarding_complete=false, so a Belman-
   // shaped customer is flagged at provision time, not silently treated as onboarded. Guarded on
   // getUser so injected test clients without it keep the prior payload unchanged.
-  let payload = metadata;
+  let payload: Record<string, any> = metadata;
   if (clerk.users.getUser) {
     // Prefer the county on THIS event's metadata; else the customer's existing selection (canonical
     // selected_counties, or a legacy allowed_counties LIST — never a numeric allowance).
@@ -117,24 +190,36 @@ async function applyEntitlement(
     });
     payload = { ...metadata, onboarding_complete: r.complete, onboarding_state: r.state, onboarding_reasons: r.reasons };
   }
+  if (pm) payload = { ...payload, ...eventMarkers(pm, ctx, pm.stripe_subscription_id === args.subId) };
   await clerk.users.updateUserMetadata(targetUserId, { publicMetadata: payload });
   await persistMapping(stripe, args.customerId, args.subId, targetUserId);
+  return 'applied';
 }
+
+type ProvisionArgs = {
+  email: string | null; tier: string; customerId: string; subId: string; clerkUserId: string | null;
+  county?: string | null; paused?: boolean;
+  // Derived from Stripe's CURRENT subscription status (see entitlementForStatus). Defaults keep the
+  // pre-existing payload for callers that do not pass them.
+  billingStatus?: string; stripeStatus?: string;
+};
 
 // Idempotent. Prefer linking by Clerk user id (durable); fall back to email (create if
 // absent) and ALERT that identity was missing at checkout.
 export async function provision(
-  stripe: StripeLike, clerk: ClerkLike, alert: Alert,
-  args: { email: string | null; tier: string; customerId: string; subId: string; clerkUserId: string | null; county?: string | null; paused?: boolean },
-): Promise<void> {
+  stripe: StripeLike, clerk: ClerkLike, alert: Alert, args: ProvisionArgs, ctx: EventCtx = {},
+  opts: { allowRebind?: boolean } = {},
+): Promise<Outcome> {
   const metadata: Record<string, any> = {
     tier: args.tier, stripe_customer_id: args.customerId, stripe_subscription_id: args.subId,
     // A subscription with pause_collection set (the Seam-3 interlock) becomes status=active at trial
     // end but is NOT billed ($0, invoices voided). Do NOT stamp it 'active' (permit_bot counts that
     // as active_paid MRR) — mark 'paused' so it is excluded from paying revenue and surfaces as a
     // distinct lifecycle exception. Reset to 'active' on resume (onboarding completion).
-    counties_allowed: TIER_COUNTIES[args.tier] || 1, billing_status: args.paused ? 'paused' : 'active',
+    counties_allowed: TIER_COUNTIES[args.tier] || 1,
+    billing_status: args.billingStatus ?? (args.paused ? 'paused' : 'active'),
   };
+  if (args.stripeStatus) metadata.stripe_subscription_status = args.stripeStatus;
   // County-limited tiers (starter/pro) carry the SPECIFIC selected county as the canonical
   // selected_counties (a checkout-metadata county IS a customer selection). Team grants all
   // counties, so skipped. Only set when a county is known, so an event without county metadata
@@ -143,8 +228,7 @@ export async function provision(
     metadata.selected_counties = [args.county];
   }
   if (args.clerkUserId) {
-    await applyEntitlement(stripe, clerk, alert, args.clerkUserId, args, metadata);
-    return;
+    return applyEntitlement(stripe, clerk, alert, args.clerkUserId, args, metadata, ctx, opts);
   }
   alert('identity_missing_at_checkout', { email: args.email, customerId: args.customerId, subId: args.subId, tier: args.tier });
   if (!args.email) {
@@ -155,11 +239,11 @@ export async function provision(
   }
   const existing = await clerk.users.getUserList({ emailAddress: [args.email] });
   if (existing.totalCount > 0) {
-    await applyEntitlement(stripe, clerk, alert, existing.data[0].id, args, metadata);
-  } else {
-    const created = await clerk.users.createUser({ emailAddress: [args.email], publicMetadata: metadata, skipPasswordRequirement: true });
-    await persistMapping(stripe, args.customerId, args.subId, created.id);
+    return applyEntitlement(stripe, clerk, alert, existing.data[0].id, args, metadata, ctx, opts);
   }
+  const created = await clerk.users.createUser({ emailAddress: [args.email], publicMetadata: { ...metadata, ...eventMarkers(null, ctx, false) }, skipPasswordRequirement: true });
+  await persistMapping(stripe, args.customerId, args.subId, created.id);
+  return 'applied';
 }
 
 async function emailFromCustomer(stripe: StripeLike, customerId: string): Promise<string | null> {
@@ -170,54 +254,158 @@ async function emailFromCustomer(stripe: StripeLike, customerId: string): Promis
   } catch { return null; }
 }
 
+// ── Subscription reconciliation (single path for every subscription-shaped event) ────────────
+// Re-reads the subscription from Stripe so a late/out-of-order event can never apply an OLD snapshot:
+// the CURRENT status decides entitlement.
+async function currentSubscription(stripe: StripeLike, eventSub: any): Promise<any> {
+  // If Stripe cannot be read this THROWS (→ webhook 500 → Stripe retries) rather than acting on a
+  // possibly-stale snapshot: an out-of-date 'active' snapshot must never grant access.
+  const fresh = await stripe.subscriptions.retrieve(eventSub.id);
+  if (fresh && fresh.id === eventSub.id && fresh.status) return { ...eventSub, ...fresh, metadata: { ...(eventSub.metadata || {}), ...(fresh.metadata || {}) } };
+  return eventSub;
+}
+
+const SAFE_ID = /^[A-Za-z0-9_]+$/;
+
+// READ-ONLY: other subscriptions that still grant entitlement to this user (never mutates Stripe).
+async function otherEntitledSubscriptions(stripe: StripeLike, userId: string, customerId: string, excludeSubId: string): Promise<any[]> {
+  const seen = new Map<string, any>();
+  const add = (rows: any[] | undefined) => { for (const r of rows || []) if (r?.id && r.id !== excludeSubId) seen.set(r.id, r); };
+  try { if (stripe.subscriptions.search && SAFE_ID.test(userId)) add((await stripe.subscriptions.search({ query: `metadata['clerk_user_id']:'${userId}'`, limit: 100 })).data); } catch { /* best-effort */ }
+  try { if (stripe.subscriptions.list && customerId) add((await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 100 })).data); } catch { /* best-effort */ }
+  return [...seen.values()].filter(r => entitlementForStatus(r.status, !!r.pause_collection).action === 'grant' && tierForSubscription(r));
+}
+
+async function resolveRevocationTarget(stripe: StripeLike, clerk: ClerkLike, sub: any): Promise<string | null> {
+  const direct = resolveClerkUserId(sub.metadata, null);
+  if (direct) return direct;
+  const email = await emailFromCustomer(stripe, sub.customer as string);
+  if (!email) return null;
+  const ex = await clerk.users.getUserList({ emailAddress: [email] });
+  return ex.totalCount > 0 ? ex.data[0].id : null;
+}
+
+async function revokeEntitlement(
+  stripe: StripeLike, clerk: ClerkLike, alert: Alert, sub: any, billingStatus: string, ctx: EventCtx,
+): Promise<Outcome> {
+  const userId = await resolveRevocationTarget(stripe, clerk, sub);
+  if (!userId) return 'skipped';
+  const pm = await readPublicMetadata(clerk, userId);
+  const replay = replayGuard(pm, sub.id, ctx);
+  if (replay) return replay;
+  const boundId = pm?.stripe_subscription_id as string | undefined;
+  if (boundId && boundId !== sub.id) {
+    // A non-bound subscription (duplicate / superseded) ended. It never granted this user's access,
+    // so ending it must not revoke the entitlement held by the bound subscription.
+    alert('nonbound_subscription_ended', { clerk_user_id: userId, ended_subscription_id: sub.id, bound_subscription_id: boundId, status: sub.status });
+    return 'nonbound_ended';
+  }
+  // The bound subscription ended. If ANOTHER valid subscription still grants entitlement (e.g. the
+  // duplicate the guard refused to bind), promote it instead of revoking a paying customer.
+  const alts = await otherEntitledSubscriptions(stripe, userId, sub.customer as string, sub.id);
+  if (alts.length) {
+    alts.sort((a, b) => (TIER_RANK[tierForSubscription(b)!] - TIER_RANK[tierForSubscription(a)!]) || ((b.created || 0) - (a.created || 0)));
+    const alt = alts[0];
+    const decision = entitlementForStatus(alt.status, !!alt.pause_collection) as { action: 'grant'; billingStatus: string };
+    alert('duplicate_subscription_promoted', { clerk_user_id: userId, ended_subscription_id: sub.id, promoted_subscription_id: alt.id });
+    await provision(stripe, clerk, alert, {
+      email: null, tier: tierForSubscription(alt)!, customerId: alt.customer as string, subId: alt.id, clerkUserId: userId,
+      county: resolveSelectedCounty(alt.metadata), paused: !!alt.pause_collection,
+      billingStatus: decision.billingStatus, stripeStatus: alt.status,
+    }, {}, { allowRebind: true });
+    // Restamp markers for the ENDED sub's event so its replay is recognised.
+    return 'promoted';
+  }
+  await clerk.users.updateUserMetadata(userId, {
+    // Bind the ended subscription id so its watermark protects against a late older event (an
+    // out-of-order `updated` must not resurrect access when `deleted` was processed first).
+    publicMetadata: { tier: 'cancelled', billing_status: billingStatus, stripe_subscription_id: sub.id, stripe_subscription_status: sub.status, ...eventMarkers(pm, ctx, boundId === sub.id) },
+  });
+  return 'revoked';
+}
+
+export async function reconcileSubscription(
+  stripe: StripeLike, clerk: ClerkLike, alert: Alert, eventSub: any,
+  extra: { email?: string | null; clerkUserId?: string | null; county?: string | null; useEventSnapshot?: boolean } & EventCtx = {},
+): Promise<{ outcome: Outcome; decision: EntitlementDecision; sub: any; tier: string | null }> {
+  const sub = extra.useEventSnapshot ? eventSub : await currentSubscription(stripe, eventSub);
+  const paused = !!sub.pause_collection;
+  const decision = entitlementForStatus(sub.status, paused);
+  const ctx: EventCtx = { eventId: extra.eventId, eventCreated: extra.eventCreated };
+  const tier = tierForSubscription(sub);
+  if (decision.action === 'revoke') {
+    return { outcome: await revokeEntitlement(stripe, clerk, alert, sub, decision.billingStatus, ctx), decision, sub, tier };
+  }
+  if (decision.action === 'noop') {
+    if (decision.reason.startsWith('unknown_status')) alert('unknown_subscription_status', { subscription_id: sub.id, status: sub.status });
+    return { outcome: 'skipped', decision, sub, tier };
+  }
+  if (!tier) {
+    // FAIL CLOSED: an unrecognised price never grants anything (and never defaults to Starter).
+    alert('unknown_price', { subscription_id: sub.id, customer_id: sub.customer, price_ids: (sub.items?.data || []).map((i: any) => i?.price?.id) });
+    return { outcome: 'skipped', decision, sub, tier };
+  }
+  const custId = sub.customer as string;
+  const clerkUserId = extra.clerkUserId ?? resolveClerkUserId(sub.metadata, null);
+  const email = extra.email !== undefined ? extra.email : await emailFromCustomer(stripe, custId);
+  const county = extra.county !== undefined ? extra.county : resolveSelectedCounty(sub.metadata);
+  const outcome = await provision(stripe, clerk, alert, {
+    email, tier, customerId: custId, subId: sub.id, clerkUserId, county, paused,
+    billingStatus: decision.billingStatus, stripeStatus: sub.status,
+  }, ctx);
+  return { outcome, decision, sub, tier };
+}
+
+const NO_EMIT = new Set<Outcome>(['duplicate_event', 'stale_event', 'skipped']);
+
 // Route the parsed Stripe event to provisioning. Returns nothing; throws on transient
 // errors (caller maps to 500 → Stripe retry). Never silent: alerts on missing identity.
 export async function handleStripeEvent(
   stripe: StripeLike, clerk: ClerkLike, event: any, cb: { emit: Emit; alert: Alert },
 ): Promise<void> {
   const { emit, alert } = cb;
+  const ctx: EventCtx = { eventId: event.id || null, eventCreated: typeof event.created === 'number' ? event.created : null };
   if (event.type === 'checkout.session.completed') {
     const s = event.data.object;
     const email = s.customer_email || s.customer_details?.email || null;
     const subId = s.subscription as string; const custId = s.customer as string;
     if (subId && custId) {
       const sub = await stripe.subscriptions.retrieve(subId);
-      const tier = PRICE_TO_TIER[sub.items.data[0]?.price?.id || ''] || 'starter';
       const clerkUserId = resolveClerkUserId(s.metadata, s.client_reference_id) || resolveClerkUserId(sub.metadata, null);
       const county = resolveSelectedCounty(s.metadata) || resolveSelectedCounty(sub.metadata);
-      await provision(stripe, clerk, alert, { email, tier, customerId: custId, subId, clerkUserId, county, paused: !!sub.pause_collection });
-      await emit('trial_started', { client_reference_id: s.client_reference_id || undefined, stripe_session_id: s.id, stripe_subscription_id: subId, email: email || undefined, plan: tier, properties: { customer_id: custId, subscription_status: sub.status, clerk_user_id: clerkUserId || undefined } });
+      const r = await reconcileSubscription(stripe, clerk, alert, { ...sub, id: sub.id || subId, customer: sub.customer || custId },
+        { email, clerkUserId, county, useEventSnapshot: true, ...ctx });
+      if (r.decision.action === 'grant' && !NO_EMIT.has(r.outcome)) {
+        await emit('trial_started', { client_reference_id: s.client_reference_id || undefined, stripe_session_id: s.id, stripe_subscription_id: subId, email: email || undefined, plan: r.tier!, properties: { customer_id: custId, subscription_status: sub.status, clerk_user_id: clerkUserId || undefined } });
+      }
     }
-  } else if (event.type === 'invoice.payment_succeeded') {
+  } else if (event.type === 'invoice.payment_succeeded' || event.type === 'invoice.paid') {
     const inv = event.data.object;
-    const subId = inv.subscription as string;
+    // The subscription reference moved under `parent.subscription_details` on newer Stripe API versions.
+    const subId = (inv.subscription || inv.parent?.subscription_details?.subscription) as string;
     if ((inv.amount_paid || 0) > 0 && subId) {
       const sub = await stripe.subscriptions.retrieve(subId);
-      const tier = PRICE_TO_TIER[sub.items.data[0]?.price?.id || ''] || 'starter';
-      const custId = sub.customer as string;
-      const clerkUserId = resolveClerkUserId(sub.metadata, null);
-      const email = inv.customer_email || (await emailFromCustomer(stripe, custId));
-      const county = resolveSelectedCounty(sub.metadata);
-      await provision(stripe, clerk, alert, { email, tier, customerId: custId, subId, clerkUserId, county, paused: !!sub.pause_collection });
-      await emit('paid_subscription_started', { stripe_subscription_id: subId, email: email || undefined, plan: tier, properties: { invoice_id: inv.id, amount_paid: inv.amount_paid, clerk_user_id: clerkUserId || undefined } });
+      const email = inv.customer_email || (await emailFromCustomer(stripe, sub.customer as string));
+      const r = await reconcileSubscription(stripe, clerk, alert, { ...sub, id: sub.id || subId }, { email, useEventSnapshot: true, ...ctx });
+      if (r.decision.action === 'grant' && !NO_EMIT.has(r.outcome)) {
+        await emit('paid_subscription_started', { stripe_subscription_id: subId, email: email || undefined, plan: r.tier!, properties: { invoice_id: inv.id, amount_paid: inv.amount_paid, clerk_user_id: resolveClerkUserId(sub.metadata, null) || undefined } });
+      }
     }
-  } else if (event.type === 'customer.subscription.created' || event.type === 'customer.subscription.updated') {
-    const sub = event.data.object;
-    const tier = PRICE_TO_TIER[sub.items.data[0]?.price?.id || ''] || 'starter';
-    const custId = sub.customer as string;
-    const clerkUserId = resolveClerkUserId(sub.metadata, null);
-    const email = await emailFromCustomer(stripe, custId);
-    const county = resolveSelectedCounty(sub.metadata);
-    await provision(stripe, clerk, alert, { email, tier, customerId: custId, subId: sub.id, clerkUserId, county, paused: !!sub.pause_collection });
-  } else if (event.type === 'customer.subscription.deleted') {
-    const sub = event.data.object;
-    const clerkUserId = resolveClerkUserId(sub.metadata, null);
-    const meta = { tier: 'cancelled', billing_status: 'cancelled' };
-    if (clerkUserId) await clerk.users.updateUserMetadata(clerkUserId, { publicMetadata: meta });
-    else {
-      const email = await emailFromCustomer(stripe, sub.customer as string);
-      if (email) { const ex = await clerk.users.getUserList({ emailAddress: [email] }); if (ex.totalCount > 0) await clerk.users.updateUserMetadata(ex.data[0].id, { publicMetadata: meta }); }
+  } else if (event.type === 'invoice.payment_failed') {
+    // Failed payment: never leave stale 'active'. Reconcile from Stripe's CURRENT subscription state
+    // (past_due → billing_status past_due; unpaid/canceled → revoked). Alerts the owner either way.
+    const inv = event.data.object;
+    const subId = (inv.subscription || inv.parent?.subscription_details?.subscription) as string;
+    alert('payment_failed', { invoice_id: inv.id, subscription_id: subId, customer_id: inv.customer, attempt_count: inv.attempt_count });
+    if (subId) {
+      const sub = await stripe.subscriptions.retrieve(subId);
+      await reconcileSubscription(stripe, clerk, alert, { ...sub, id: sub.id || subId }, { ...ctx });
     }
+  } else if (event.type === 'customer.subscription.created' || event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
+    const sub = event.data.object;
+    // `deleted` is terminal by definition; trust it even if Stripe's retrieve is momentarily stale.
+    const snapshot = event.type === 'customer.subscription.deleted' ? { ...sub, status: 'canceled' } : sub;
+    await reconcileSubscription(stripe, clerk, alert, snapshot, { ...ctx, useEventSnapshot: event.type === 'customer.subscription.deleted' });
   } else if (event.type === 'customer.subscription.trial_will_end') {
     // Seam 3 — trial → first-charge interlock. Stripe fires this ~3 days before the trial ends.
     // If the canonical onboarding contract is NOT complete, withhold the first charge by pausing
@@ -225,7 +413,8 @@ export async function handleStripeEvent(
     // (a customer charged for a product that was never deliverable). Does NOT enable delivery
     // enforcement and never cancels/refunds.
     const sub = event.data.object;
-    const tier = PRICE_TO_TIER[sub.items.data[0]?.price?.id || ''] || 'starter';
+    const tier = tierForSubscription(sub);
+    if (!tier) { alert('unknown_price', { subscription_id: sub.id, customer_id: sub.customer, price_ids: (sub.items?.data || []).map((i: any) => i?.price?.id) }); return; }
     const custId = sub.customer as string;
     const clerkUserId = resolveClerkUserId(sub.metadata, null);
     const pm = clerkUserId ? await readPublicMetadata(clerk, clerkUserId) : null;
