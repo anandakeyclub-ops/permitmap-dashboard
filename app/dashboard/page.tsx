@@ -36,7 +36,8 @@ import {
 } from '../../lib/activationEvents';
 import { startCheckout } from '../../lib/start-checkout';
 import SavedLeads from './_components/SavedLeads';
-import { promoteSignupCounty, dismissFirstLogin } from '../actions';
+import { promoteSignupCounty, dismissFirstLogin, saveDashboardTour } from '../actions';
+import DashboardTour, { DASHBOARD_TOUR_VERSION } from './_components/DashboardTour';
 import {
   BarChart, Bar, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
@@ -142,6 +143,7 @@ export default function Dashboard() {
     { trigger: 'locked_county' | 'get_full_access_button'; county: any | null } | null
   >(null);
   const [showWelcome, setShowWelcome] = useState(false);
+  const [showTour, setShowTour] = useState(false);
   const [sortOption, setSortOption]   = useState<SortOption>(''); // '' = current server order (default)
   const [selectedPermit, setSelectedPermit] = useState<any | null>(null); // read-only detail drawer
   const rowRef = useRef<HTMLTableRowElement | null>(null);               // return focus here on close
@@ -212,6 +214,15 @@ export default function Dashboard() {
     setShowWelcome(false);
     dismissFirstLogin().catch(() => {});
   };
+  const finishTour = (state: 'completed' | 'dismissed') => {
+    setShowTour(false); setShowWelcome(false);
+    saveDashboardTour(DASHBOARD_TOUR_VERSION, state).catch(() => {});
+    dismissFirstLogin().catch(() => {});
+  };
+  const trackTour = (event: string, props: Record<string, any> = {}) => {
+    // Preserve the ratified activation taxonomy; tour detail rides as structured properties.
+    track(getToken, 'dashboard_viewed', { county, properties: { tour_event: event, ...props, tier } });
+  };
 
   // County taxonomy is public product configuration. Never attach the Clerk token here:
   // production auth rejects that token at this public route, which strands the selector empty.
@@ -257,9 +268,13 @@ export default function Dashboard() {
     }
   }, [county, activeTab, tier, getToken]);
 
-  // First-login onboarding (PART C): shown until dismissed (publicMetadata.firstLogin === false).
+  // Versioned first-run tour. Paid users see it once; future tour versions may be introduced
+  // without resetting product onboarding or billing metadata.
   useEffect(() => {
-    if (user) setShowWelcome(user.publicMetadata?.firstLogin !== false);
+    if (!user) return;
+    const seen = Number((user.publicMetadata as any)?.dashboard_tour_version || 0);
+    const firstLogin = user.publicMetadata?.firstLogin !== false;
+    setShowWelcome(firstLogin && seen < DASHBOARD_TOUR_VERSION);
   }, [user]);
 
   // P4 onboarding gate: a paying customer whose product configuration is incomplete (no real
@@ -531,6 +546,7 @@ export default function Dashboard() {
           }}>{limits.label}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          {!isPreview && <button onClick={()=>{setShowTour(true);trackTour('dashboard_tour_replayed',{version:DASHBOARD_TOUR_VERSION});}} style={{background:'transparent',border:'1px solid #334155',color:'#94a3b8',fontSize:12,fontWeight:700,padding:'6px 10px',borderRadius:6,cursor:'pointer'}}>Take tour</button>}
           <span style={{ fontSize: 13, color: '#64748b' }}>
             {user?.emailAddresses?.[0]?.emailAddress}
           </span>
@@ -653,26 +669,25 @@ export default function Dashboard() {
                 </p>
               </div>
 
-              {/* PART C: one-time first-login onboarding, above the permit content */}
+              {/* First-run value orientation. The guided tour is contextual and persisted per user. */}
               {showWelcome && !isPreview && (
                 <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
-                  background: 'linear-gradient(135deg, #1e3a5f 0%, #0d1529 100%)',
-                  border: '1px solid #2563eb40', borderRadius: 12,
-                  padding: '14px 18px', marginBottom: 24, flexWrap: 'wrap',
+                  display:'flex',alignItems:'center',justifyContent:'space-between',gap:18,
+                  background:'linear-gradient(135deg,#102a27 0%,#0d1529 72%)',border:'1px solid #34d39945',
+                  borderRadius:14,padding:'18px 20px',marginBottom:24,flexWrap:'wrap',
                 }}>
-                  <span style={{ fontSize: 14, color: '#e2e8f0' }}>
-                    👋 Welcome to PermitMap. You&apos;re viewing <strong>{summary.label}</strong> permits.
-                    Star any permit to save it as a lead. →
-                  </span>
-                  <button onClick={dismissWelcome} style={{
-                    background: 'transparent', border: '1px solid #2563eb60', color: '#93c5fd',
-                    borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  }}>
-                    Dismiss
-                  </button>
+                  <div style={{maxWidth:650}}>
+                    <div style={{fontSize:11,fontWeight:800,color:'#34d399',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:5}}>New to PermitMap?</div>
+                    <strong style={{display:'block',fontSize:17,color:'#f1f5f9',marginBottom:4}}>Find the projects worth researching first.</strong>
+                    <span style={{fontSize:13,color:'#94a3b8',lineHeight:1.55}}>Take a 60-second tour of opportunities, permit research, saved leads and market intelligence.</span>
+                  </div>
+                  <div style={{display:'flex',gap:9}}>
+                    <button onClick={()=>setShowWelcome(false)} style={{background:'transparent',border:'1px solid #334155',color:'#94a3b8',borderRadius:8,padding:'9px 13px',fontSize:13,fontWeight:700,cursor:'pointer'}}>Not now</button>
+                    <button onClick={()=>setShowTour(true)} style={{background:'#34d399',border:0,color:'#052e25',borderRadius:8,padding:'9px 16px',fontSize:13,fontWeight:800,cursor:'pointer'}}>Take the tour →</button>
+                  </div>
                 </div>
               )}
+              <DashboardTour open={showTour} onFinish={finishTour} onTrack={trackTour} />
 
               {/* Retention layer: make the recurring agreement explicit and guide every paid
                   subscriber to the first actions that correlate with realized value. Read failures
@@ -745,7 +760,7 @@ export default function Dashboard() {
               )}
 
               {/* Tabs */}
-              <div className="pm-dashboard-tabs" style={{ gap: 4, marginBottom: 20,
+              <div className="pm-dashboard-tabs" data-tour="dashboard-tabs" style={{ gap: 4, marginBottom: 20,
                 borderBottom: '1px solid #23312d', paddingBottom: 0 }}>
                 {([
                   ['opportunities','Opportunities'],
@@ -754,7 +769,7 @@ export default function Dashboard() {
                   ['trends','Market Intelligence'],
                   ['insights','Briefing'],
                 ] as const).map(([tab,label]) => (
-                  <button key={tab} onClick={() => setActiveTab(tab)} title={
+                  <button key={tab} data-tour={`tab-${tab}`} onClick={() => setActiveTab(tab)} title={
                     tab==='opportunities'?'Ranked permits worth pursuing':
                     tab==='saved'?'Saved leads, follow-ups, quotes and outcomes':
                     tab==='permits'?'Search and export the authorized permit dataset':

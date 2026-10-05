@@ -108,3 +108,13 @@ export async function dismissFirstLogin(): Promise<void> {
   const client = await clerkClient();
   await client.users.updateUserMetadata(userId, { publicMetadata: { firstLogin: false } });
 }
+
+/** Persist the versioned dashboard tour state without touching billing/onboarding metadata. */
+export async function saveDashboardTour(version: number, state: 'completed' | 'dismissed'): Promise<void> {
+  const { userId } = await auth();
+  if (!userId) return;
+  const client = await clerkClient();
+  await client.users.updateUserMetadata(userId, {
+    publicMetadata: { dashboard_tour_version: version, dashboard_tour_state: state },
+  });
+}
