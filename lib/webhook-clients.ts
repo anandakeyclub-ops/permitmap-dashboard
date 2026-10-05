@@ -53,6 +53,9 @@ export function wrapStripeWithIdempotentMapping(stripe: any) {
     webhooks: stripe.webhooks,
     subscriptions: {
       retrieve: rawSubRetrieve,
+      // READ-ONLY lookups used to reconcile duplicate subscriptions (never mutate Stripe).
+      ...(stripe.subscriptions.list ? { list: stripe.subscriptions.list.bind(stripe.subscriptions) } : {}),
+      ...(stripe.subscriptions.search ? { search: stripe.subscriptions.search.bind(stripe.subscriptions) } : {}),
       update: async (id: string, params: any) => {
         if (params?.metadata?.clerk_user_id && Object.keys(params).length === 1) {
           const current = await rawSubRetrieve(id);
