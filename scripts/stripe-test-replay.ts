@@ -19,6 +19,7 @@ import Stripe from 'stripe';
 import { createClerkClient } from '@clerk/backend';
 import { handleWebhook, PRICE_TO_TIER } from '../lib/provisioning';
 import { wrapClerkWithRateLimitRetry, wrapStripeWithIdempotentMapping } from '../lib/webhook-clients';
+import { attachCard as attachCardTo, assertDefaultPaymentMethodAttached } from './stripe-replay-fixtures';
 
 const SECRET = 'whsec_local_replay_only';
 const sk = process.env.STRIPE_SECRET_KEY || '';
@@ -69,12 +70,9 @@ async function customer(userId: string, label: string, clockId?: string) {
   const c = await stripeRaw.customers.create({ email: `${RUN}+${label}@example.com`, metadata: { clerk_user_id: userId, replay_run: RUN }, ...(clockId ? { test_clock: clockId } : {}) });
   cleanup.customers.push(c.id); return c;
 }
-async function attachCard(customerId: string, pm: string, makeDefault = true) {
-  await stripeRaw.paymentMethods.attach(pm, { customer: customerId });
-  if (makeDefault) await stripeRaw.customers.update(customerId, { invoice_settings: { default_payment_method: pm } });
-  return pm;
-}
+const attachCard = (customerId: string, token: string, makeDefault = true) => attachCardTo(stripeRaw as any, customerId, token, makeDefault);
 async function subscribe(customerId: string, userId: string, price: string, extra: Record<string, any> = {}) {
+  await assertDefaultPaymentMethodAttached(stripeRaw as any, customerId); // fixture invariant: payment_method.customer === customer.id
   const s = await stripeRaw.subscriptions.create({ customer: customerId, items: [{ price }], metadata: { clerk_user_id: userId, replay_run: RUN }, ...extra });
   cleanup.subs.push(s.id); return s;
 }
@@ -112,29 +110,36 @@ async function main() {
     return `trialing then ${live.status}`;
   });
 
-  await check('active → past_due → active (successful retry)', async () => {
+  let pd: { u: string; c: any; s: any; clock: string; failedInvId: string } | null = null;
+  await check('active → past_due', async () => {
     const clock = await stripeRaw.testHelpers.testClocks.create({ frozen_time: Math.floor(Date.now() / 1000), name: `${RUN} pd` }); cleanup.clocks.push(clock.id);
     const u = await newUser('pastdue'); const c = await customer(u, 'pastdue', clock.id);
     await attachCard(c.id, 'pm_card_visa');
     const s = await subscribe(c.id, u, P.pro);
     await deliver('customer.subscription.created', s);
     expectMeta(await meta(u), { tier: 'pro', billing_status: 'active' });
-    const bad = await attachCard(c.id, 'pm_card_chargeCustomerFail');
+    await attachCard(c.id, 'pm_card_chargeCustomerFail'); // becomes the default; the next renewal charge fails
     await advance(clock.id, 32);
-    const pd = await waitStatus(s.id, ['past_due', 'unpaid', 'canceled']);
-    if (pd.status !== 'past_due') throw new Error(`expected past_due from Stripe, got ${pd.status} (account dunning settings?)`);
+    const live = await waitStatus(s.id, ['past_due', 'unpaid', 'canceled']);
+    if (live.status !== 'past_due') throw new Error(`expected past_due from Stripe, got ${live.status} (account dunning settings?)`);
     const failedInv = await latestInvoice(c.id);
     await deliver('invoice.payment_failed', failedInv);
-    await deliver('customer.subscription.updated', pd);
+    await deliver('customer.subscription.updated', live);
     expectMeta(await meta(u), { tier: 'pro', billing_status: 'past_due' });
     if (!alerts.some(a => a.kind === 'payment_failed')) throw new Error('payment_failed alert not raised');
-    await attachCard(c.id, 'pm_card_mastercard');
-    await stripeRaw.invoices.pay(failedInv.id, { payment_method: 'pm_card_mastercard' });
-    const ok = await waitStatus(s.id, ['active']);
-    await deliver('invoice.payment_succeeded', await stripeRaw.invoices.retrieve(failedInv.id));
+    pd = { u, c, s, clock: clock.id, failedInvId: failedInv.id };
+    return 'past_due, access kept, not stamped active';
+  });
+
+  await check('past_due → active (successful retry)', async () => {
+    if (!pd) throw new Error('prerequisite scenario "active → past_due" did not reach past_due');
+    const goodPm = await attachCard(pd.c.id, 'pm_card_mastercard'); // returns the ATTACHED payment method id
+    await stripeRaw.invoices.pay(pd.failedInvId, { payment_method: goodPm });
+    const ok = await waitStatus(pd.s.id, ['active']);
+    await deliver('invoice.payment_succeeded', await stripeRaw.invoices.retrieve(pd.failedInvId));
     await deliver('customer.subscription.updated', ok);
-    expectMeta(await meta(u), { tier: 'pro', billing_status: 'active' });
-    void bad; return `past_due then ${ok.status}`;
+    expectMeta(await meta(pd.u), { tier: 'pro', billing_status: 'active' });
+    return `past_due then ${ok.status}`;
   });
 
   await check('active → unpaid/canceled after exhausted retries (whatever Stripe actually does)', async () => {
