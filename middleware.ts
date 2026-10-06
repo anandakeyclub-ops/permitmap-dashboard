@@ -8,6 +8,8 @@ const isPublicRoute = createRouteMatcher([
   '/sign-up(.*)',
   '/api/stripe-webhook',
   '/api/health',
+  // Self-authenticating (bearer REVENUE_INTEGRITY_TOKEN, fails closed); polled by permit-bot, which has no Clerk session.
+  '/api/internal/revenue-integrity',
 ]);
 
 export default clerkMiddleware((auth, req) => {
