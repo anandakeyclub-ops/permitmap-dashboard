@@ -1,8 +1,14 @@
 # Clerk Dev → Production Migration Tooling (dry-run by default)
 
-app.permitmap.org currently authenticates production traffic against a Clerk **development** instance
+> **STATUS (verified against live Stripe + production Clerk, Oct 2026):** the Clerk dev → production migration has been
+> performed. app.permitmap.org authenticates against the **production** Clerk instance (the 11 imported users were created
+> Sep 25; the production instance now has more). Stripe `clerk_user_id` metadata already points at production users, so
+> **no relink is pending**. This document is retained as the historical contract; do not treat the cutover steps below as a
+> to-do. Any tool that reads Clerk must be run with an `sk_live_` key (the tools refuse `sk_test_` unless `--allow-dev-clerk`).
+
+Originally, app.permitmap.org authenticated against a Clerk **development** instance
 (`pk_test_…`, `*.clerk.accounts.dev`). Moving to a Clerk **production** instance is not a key swap:
-existing users (and their Stripe linkage + entitlement) live on the dev instance and must be migrated.
+existing users (and their Stripe linkage + entitlement) lived on the dev instance and had to be migrated.
 This directory holds the machinery + validated contract for a **safe, reversible** cutover. **Nothing
 here mutates Clerk, Stripe, or Vercel; every executor defaults to dry-run and fails closed without
 explicit `apply` + real credentials.**
@@ -55,10 +61,10 @@ N. Roll back if any gate fails.
 validated in staging; keep it as late as safely possible so most rollbacks need no Stripe restore.
 
 ## Rollback
-- Restore Vercel Production env to the dev Clerk keys (pk_test/sk_test) + dev webhook secret.
-- Redeploy the recorded prior deployment (`DEPLOYED_COMMIT_BEFORE`).
-- Only if Stripe was already relinked: run `buildRollbackManifest(...).stripe_restore` to restore
-  `clerk_user_id` to the dev value. Newly-created prod users can be left in place (unreferenced).
+- **Never** revert Vercel to the development Clerk keys: production Clerk is live and users/checkouts now exist only there.
+- To undo a Stripe relink: run `buildRollbackManifest(...).stripe_restore` with a live Stripe key (restores the recorded old
+  `clerk_user_id`), then re-verify with `scripts/prod-entitlement-reconcile.ts`.
+- To undo a deployment: Vercel rollback of the recorded prior deployment (`DEPLOYED_COMMIT_BEFORE`); do not edit Clerk keys.
 
 ## Validation checklist (pass/fail)
 `EXISTING_PAYING_USER_LOGIN`, `EXISTING_TRIAL_USER_LOGIN`, `ENTITLEMENT_VISIBLE`, `COUNTY_ACCESS_CORRECT`,

@@ -241,6 +241,10 @@ describe('rollback manifest', () => {
     expect(rb.stripe_restore).toEqual(expect.arrayContaining([
       expect.objectContaining({ target: 'customer.metadata.clerk_user_id', old_value: 'user_prod_1', new_value: 'user_dev_1' }),
     ]));
-    expect(rb.operational_steps.join(' ')).toMatch(/Restore Vercel Production env/);
+    const ops = rb.operational_steps.join(' ');
+    expect(ops).toMatch(/DO NOT change Vercel Clerk keys/);
+    expect(ops).toMatch(/stripe_restore/);
+    // never instruct a revert to the development Clerk instance
+    expect(ops).not.toMatch(/pk_test_|sk_test_|dev Clerk keys|clerk\.accounts\.dev/i);
   });
 });
