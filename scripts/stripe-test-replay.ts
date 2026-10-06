@@ -19,7 +19,11 @@
  * scenario fails with conversion_classification_unavailable instead of silently passing.
  *
  * Safety: refuses to run unless BOTH keys are test/dev keys; uses throwaway Clerk users on the dev instance; only ever
- * touches objects it created; cleans up in `finally` (also after a failed scenario or a fatal error). It mutates
+ * touches objects it created. Cleanup (subscriptions, test clocks, customers, Clerk users, then prices and their product archived)
+ * runs exactly once on EVERY exit path: normal finish, failed scenarios, a fatal error, and SIGINT/SIGTERM (the first signal stops the
+ * run at its next step and runs the same cleanup; a second signal forces exit and prints how to sweep). A failed cleanup operation is
+ * reported and exits non-zero, and never stops the remaining operations. Exit codes: 0 passed, 1 failure, 130 SIGINT, 143 SIGTERM.
+ * SIGKILL or a crash cannot run cleanup; leftovers carry metadata.replay_run=<run id> for manual sweep. It mutates
  * PRICE_TO_TIER IN THIS PROCESS ONLY so the freshly-created TEST price ids map to tiers. Not the HTTP route wrapper
  * (app/api/stripe-webhook/route.ts), which is covered by tests/stripe-webhook-route.test.ts.
  */
@@ -41,16 +45,31 @@ const clerkRaw = createClerkClient({ secretKey: ck });
 const clerk = wrapClerkWithRateLimitRetry(clerkRaw) as any;
 
 const RUN = `replay${Date.now()}`;
-const cleanup = { users: [] as string[], subs: [] as string[], clocks: [] as string[], customers: [] as string[] };
+const cleanup = { users: [] as string[], subs: [] as string[], clocks: [] as string[], customers: [] as string[], prices: [] as string[], products: [] as string[] };
 const results: { name: string; ok: boolean; detail: string }[] = [];
 let emitted: { name: string; payload?: any }[] = []; let alerts: { kind: string }[] = [];
 let seq = 0;
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+// ---- Interrupt handling. The first SIGINT/SIGTERM only REQUESTS shutdown: the run stops at its next step (every sleep/poll
+// and every object-creating helper checks) and the SAME cleanup path as a normal finish runs, once. A second signal forces exit.
+class Interrupted extends Error { constructor(public signal: string) { super(`interrupted by ${signal}`); } }
+let interruptedBy: string | null = null;
+let signalInterrupt!: (s: string) => void;
+const interruptWake = new Promise<never>((_, rej) => { signalInterrupt = s => rej(new Interrupted(s)); });
+interruptWake.catch(() => { /* consumed by sleep()/guard(); avoid an unhandled rejection */ });
+const guard = () => { if (interruptedBy) throw new Interrupted(interruptedBy); };
+const exitCodeFor = (sig: string) => (sig === 'SIGINT' ? 130 : 143);
+for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => {
+  if (interruptedBy) { console.error(`\n${sig} again: forcing exit. Test objects may remain; sweep by metadata replay_run=${RUN}.`); process.exit(exitCodeFor(interruptedBy)); return; }
+  interruptedBy = sig; console.error(`\n${sig} received: stopping and cleaning up (signal again to force exit)...`); signalInterrupt(sig);
+});
+
+const sleep = (ms: number) => Promise.race([new Promise<void>(r => setTimeout(r, ms)), interruptWake]) as Promise<void>;
 const emit = async (name: string, payload?: any) => { emitted.push({ name, payload }); };
 const alert = (kind: string) => { alerts.push({ kind }); };
 
 async function newUser(label: string) {
+  guard();
   const u = await clerkRaw.users.createUser({ emailAddress: [`${RUN}+${label}@example.com`], skipPasswordRequirement: true, publicMetadata: {} });
   cleanup.users.push(u.id); return u.id as string;
 }
@@ -66,20 +85,23 @@ async function deliver(type: string, object: any, opts: { id?: string; created?:
 }
 
 async function check(name: string, fn: () => Promise<string>) {
+  guard();
   emitted = []; alerts = [];
   try { const d = await fn(); results.push({ name, ok: true, detail: d }); console.log(`PASS  ${name}  ${d}`); }
-  catch (e: any) { results.push({ name, ok: false, detail: e.message }); console.log(`FAIL  ${name}  ${e.message}`); }
+  catch (e: any) { if (e instanceof Interrupted) throw e; results.push({ name, ok: false, detail: e.message }); console.log(`FAIL  ${name}  ${e.message}`); }
 }
 function expectMeta(m: Record<string, any>, want: Record<string, any>) {
   for (const [k, v] of Object.entries(want)) if (m[k] !== v) throw new Error(`expected ${k}=${JSON.stringify(v)} got ${JSON.stringify(m[k])} (full: tier=${m.tier} billing=${m.billing_status} sub=${m.stripe_subscription_id} raw=${m.stripe_subscription_status})`);
 }
 
 async function customer(userId: string, label: string, clockId?: string) {
+  guard();
   const c = await stripeRaw.customers.create({ email: `${RUN}+${label}@example.com`, metadata: { clerk_user_id: userId, replay_run: RUN }, ...(clockId ? { test_clock: clockId } : {}) });
   cleanup.customers.push(c.id); return c;
 }
-const attachCard = (customerId: string, token: string, makeDefault = true) => attachCardTo(stripeRaw as any, customerId, token, makeDefault);
+const attachCard = (customerId: string, token: string, makeDefault = true) => { guard(); return attachCardTo(stripeRaw as any, customerId, token, makeDefault); };
 async function subscribe(customerId: string, userId: string, price: string, extra: Record<string, any> = {}) {
+  guard();
   await assertDefaultPaymentMethodAttached(stripeRaw as any, customerId); // fixture invariant: payment_method.customer === customer.id
   const s = await stripeRaw.subscriptions.create({ customer: customerId, items: [{ price }], metadata: { clerk_user_id: userId, replay_run: RUN }, ...extra });
   cleanup.subs.push(s.id); return s;
@@ -108,8 +130,8 @@ const conversions = () => emitted.filter(e => e.name === 'paid_subscription_star
 
 async function main() {
   // Test-mode catalog, mapped to tiers for THIS process only.
-  const prod = await stripeRaw.products.create({ name: `${RUN} replay product`, metadata: { replay_run: RUN } });
-  const mkPrice = async (amt: number) => (await stripeRaw.prices.create({ product: prod.id, currency: 'usd', unit_amount: amt, recurring: { interval: 'month' } })).id;
+  const prod = await stripeRaw.products.create({ name: `${RUN} replay product`, metadata: { replay_run: RUN } }); cleanup.products.push(prod.id);
+  const mkPrice = async (amt: number) => { guard(); const pr = await stripeRaw.prices.create({ product: prod.id, currency: 'usd', unit_amount: amt, recurring: { interval: 'month' } }); cleanup.prices.push(pr.id); return pr.id; };
   const P = { starter: await mkPrice(7900), pro: await mkPrice(14900), team: await mkPrice(29900), unknown: await mkPrice(1234) };
   PRICE_TO_TIER[P.starter] = 'starter'; PRICE_TO_TIER[P.pro] = 'pro'; PRICE_TO_TIER[P.team] = 'team';
   console.log(`test prices: ${JSON.stringify(P)}`);
@@ -267,13 +289,33 @@ async function main() {
   });
 }
 
-main().catch(e => { console.error('FATAL', e); results.push({ name: 'runner', ok: false, detail: String(e?.message || e) }); })
-  .finally(async () => {
-    for (const id of cleanup.subs) { try { await stripeRaw.subscriptions.cancel(id); } catch { /* already gone */ } }
-    for (const id of cleanup.clocks) { try { await stripeRaw.testHelpers.testClocks.del(id); } catch { /* ignore */ } }
-    for (const id of cleanup.customers) { try { await stripeRaw.customers.del(id); } catch { /* ignore */ } }
-    for (const id of cleanup.users) { try { await clerkRaw.users.deleteUser(id); } catch { /* ignore */ } }
-    const bad = results.filter(r => !r.ok);
-    console.log(`\n${results.length - bad.length}/${results.length} passed`);
-    process.exit(bad.length ? 1 : 0);
-  });
+// Cleanup: ONE implementation, run at most once, reached from every exit path (normal finish, failed scenarios, fatal error, SIGINT/SIGTERM).
+// Each operation is isolated, so one failure never prevents the rest. Order: subscriptions, test clocks (deletes their customers/subs),
+// customers (detaches payment methods), Clerk users, then catalog: prices are archived BEFORE their product.
+// A genuinely failed cleanup operation is reported and makes the run exit non-zero; "already gone" (404) is fine.
+const cleanupFailures: string[] = [];
+const isGone = (e: any) => e?.code === 'resource_missing' || e?.statusCode === 404 || e?.status === 404;
+async function attempt(what: string, fn: () => Promise<unknown>) {
+  try { await fn(); } catch (e: any) { if (!isGone(e)) cleanupFailures.push(`${what}: ${String(e?.message || e).slice(0, 120)}`); }
+}
+async function doCleanup() {
+  for (const id of cleanup.subs) await attempt(`cancel subscription ${id}`, async () => { const sub = await stripeRaw.subscriptions.retrieve(id); if (sub.status !== 'canceled') await stripeRaw.subscriptions.cancel(id); });
+  for (const id of cleanup.clocks) await attempt(`delete test clock ${id}`, () => stripeRaw.testHelpers.testClocks.del(id));
+  for (const id of cleanup.customers) await attempt(`delete customer ${id}`, () => stripeRaw.customers.del(id));
+  for (const id of cleanup.users) await attempt(`delete Clerk user ${id}`, () => clerkRaw.users.deleteUser(id));
+  for (const id of cleanup.prices) await attempt(`archive price ${id}`, () => stripeRaw.prices.update(id, { active: false }));
+  for (const id of cleanup.products) await attempt(`archive product ${id}`, () => stripeRaw.products.update(id, { active: false }));
+}
+let cleanupRun: Promise<void> | null = null;
+const runCleanupOnce = () => { if (!cleanupRun) cleanupRun = doCleanup(); return cleanupRun; };
+
+main().catch(e => {
+  if (e instanceof Interrupted) { console.log(`INTERRUPTED (${e.signal}): stopped early, cleaning up`); return; }
+  console.error('FATAL', e); results.push({ name: 'runner', ok: false, detail: String(e?.message || e) });
+}).finally(async () => {
+  await runCleanupOnce();
+  for (const f of cleanupFailures) console.log(`CLEANUP FAILED  ${f}`);
+  const bad = results.filter(r => !r.ok);
+  console.log(`\n${results.length - bad.length}/${results.length} passed${interruptedBy ? ` (interrupted by ${interruptedBy})` : ''}`);
+  process.exit(interruptedBy ? exitCodeFor(interruptedBy) : bad.length || cleanupFailures.length ? 1 : 0);
+});
