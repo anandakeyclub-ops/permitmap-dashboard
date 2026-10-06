@@ -12,6 +12,7 @@ import Stripe from 'stripe';
 import { createClerkClient } from '@clerk/backend';
 import { writeFileSync } from 'node:fs';
 import { readOnly } from './readonly-guard';
+import { assertProductionInstances } from './instance-guard';
 import { entitlementForStatus, tierForSubscription } from '../lib/provisioning';
 
 const REQUIRED_EVENTS = [
@@ -27,10 +28,12 @@ async function main() {
   const out = process.argv.includes('--out') ? process.argv[process.argv.indexOf('--out') + 1] : 'prod-entitlement-report.json';
   const sk = process.env.STRIPE_SECRET_KEY || '', ck = process.env.CLERK_SECRET_KEY || '';
   if (!sk || !ck) { console.error('Set STRIPE_SECRET_KEY and CLERK_SECRET_KEY.'); process.exit(2); }
-  if (sk.startsWith('sk_test_')) { console.error('This is the PRODUCTION verifier; got a test Stripe key. Refusing.'); process.exit(2); }
+  let inst: ReturnType<typeof assertProductionInstances>;
+  try { inst = assertProductionInstances(sk, ck); } catch (e: any) { console.error(e.message); process.exit(2); }
+  console.log(inst.banner);
   const stripe = readOnly('stripe', new Stripe(sk, { apiVersion: EXPECTED_API_VERSION as any }));
   const clerk = readOnly('clerk', createClerkClient({ secretKey: ck }));
-  const report: any = { generated_at: new Date().toISOString(), mode: sk.startsWith('rk_') ? 'restricted_key' : 'secret_key', A_webhooks: {}, B_reconcile: {} };
+  const report: any = { instances: { stripe: inst.stripe, clerk: inst.clerk }, generated_at: new Date().toISOString(), mode: sk.startsWith('rk_') ? 'restricted_key' : 'secret_key', A_webhooks: {}, B_reconcile: {} };
 
   // ---------- A. webhook registration ----------
   const eps: any[] = [];

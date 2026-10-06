@@ -9,6 +9,7 @@ import Stripe from 'stripe';
 import { createClerkClient } from '@clerk/backend';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { readOnly } from '../readonly-guard';
+import { assertProductionInstances } from '../instance-guard';
 import { tierForSubscription } from '../../lib/provisioning';
 import { buildRelinkPlan } from './relink-manifest';
 import { runStripeRelink } from './stripe-relink';
@@ -21,7 +22,9 @@ async function main() {
   const dir = arg('--out-dir') || '.'; mkdirSync(dir, { recursive: true });
   const sk = process.env.STRIPE_SECRET_KEY || '', ck = process.env.CLERK_SECRET_KEY || '';
   if (!sk || !ck) { console.error('Set STRIPE_SECRET_KEY and CLERK_SECRET_KEY'); process.exit(2); }
-  if (sk.startsWith('sk_test_')) { console.error('Production tool; got a test Stripe key. Refusing.'); process.exit(2); }
+  let inst: ReturnType<typeof assertProductionInstances>;
+  try { inst = assertProductionInstances(sk, ck); } catch (e: any) { console.error(e.message); process.exit(2); }
+  console.log(inst.banner);
   const stripe: any = readOnly('stripe', new Stripe(sk, { apiVersion: '2023-10-16' as any }));
   const clerk: any = readOnly('clerk', createClerkClient({ secretKey: ck }));
 
@@ -48,11 +51,11 @@ async function main() {
   if (!dry.dryRun || dry.applied !== 0) throw new Error('invariant: relink must be dry-run');
   const gate = validateForApply(plan.rows);
   const report = {
-    generated_at: new Date().toISOString(), verdict: plan.verdict, blockers: plan.blockers, counts: plan.counts,
+    instances: { stripe: inst.stripe, clerk: inst.clerk }, generated_at: new Date().toISOString(), verdict: plan.verdict, blockers: plan.blockers, counts: plan.counts,
     stripe_subscriptions: subsRaw.length, clerk_users: users.length, unclaimed_live_stripe_subs: plan.unclaimed_live_stripe_subs,
     decisions: plan.decisions, planned_stripe_mutations: dry.planned, validateForApply: gate,
   };
-  writeFileSync(`${dir}/relink-manifest.json`, JSON.stringify({ rows: plan.rows }, null, 2));
+  writeFileSync(`${dir}/relink-manifest.json`, JSON.stringify({ clerk_instance: inst.clerk, rows: plan.rows }, null, 2));
   writeFileSync(`${dir}/relink-proof-report.json`, JSON.stringify(report, null, 2));
   writeFileSync(`${dir}/relink-rollback.json`, JSON.stringify(buildRollbackManifest(plan.rows), null, 2));
 

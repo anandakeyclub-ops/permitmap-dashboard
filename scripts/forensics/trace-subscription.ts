@@ -8,6 +8,7 @@ import Stripe from 'stripe';
 import { createClerkClient } from '@clerk/backend';
 import { writeFileSync } from 'node:fs';
 import { readOnly } from '../readonly-guard';
+import { assertProductionInstances } from '../instance-guard';
 import { tierForSubscription } from '../../lib/provisioning';
 import { classifyOrphan, OrphanEvidence } from './orphan-classify';
 
@@ -21,7 +22,9 @@ async function main() {
   if (!subId?.startsWith('sub_')) { console.error('usage: trace-subscription.ts sub_xxx [--out f] [--drift sub_a,sub_b]'); process.exit(2); }
   const sk = process.env.STRIPE_SECRET_KEY || '', ck = process.env.CLERK_SECRET_KEY || '';
   if (!sk || !ck) { console.error('Set STRIPE_SECRET_KEY and CLERK_SECRET_KEY'); process.exit(2); }
-  if (sk.startsWith('sk_test_')) { console.error('Production tool; got a test key. Refusing.'); process.exit(2); }
+  let inst: ReturnType<typeof assertProductionInstances>;
+  try { inst = assertProductionInstances(sk, ck); } catch (e: any) { console.error(e.message); process.exit(2); }
+  console.log(inst.banner);
   const stripe: any = readOnly('stripe', new Stripe(sk, { apiVersion: '2023-10-16' as any }));
   const clerk: any = readOnly('clerk', createClerkClient({ secretKey: ck }));
 
@@ -56,7 +59,7 @@ async function main() {
   const nearby = prodUsers.filter(u => Math.abs(u.created_at - anchor) < 48 * 3600e3).map(u => ({ id: u.id, hours_from_checkout: +((u.created_at - anchor) / 3600e3).toFixed(1), bound_sub: u.bound_sub, tier: u.tier }));
 
   const report: any = {
-    generated_at: new Date().toISOString(), subscription: {
+    instances: { stripe: inst.stripe, clerk: inst.clerk }, generated_at: new Date().toISOString(), subscription: {
       id: sub.id, status: sub.status, tier: evidence.sub.tier, created: iso(sub.created), trial_start: iso(sub.trial_start), trial_end: iso(sub.trial_end),
       cancel_at_period_end: !!sub.cancel_at_period_end, cancel_at: iso(sub.cancel_at), canceled_at: iso(sub.canceled_at), ended_at: iso(sub.ended_at),
       current_period_end: iso(sub.current_period_end), collection_method: sub.collection_method, has_default_pm: !!(sub.default_payment_method || cust.invoice_settings?.default_payment_method),
