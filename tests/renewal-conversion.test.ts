@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { handleStripeEvent } from '../lib/provisioning';
+import { wrapStripeWithIdempotentMapping } from '../lib/webhook-clients';
 import { makeWorld, ev, PRICE } from './_entitlement-harness';
 
 const deliver = (w: any, e: any) => handleStripeEvent(w.stripe, w.clerk, e, { emit: w.emit, alert: w.alert });
@@ -64,5 +65,13 @@ describe('paid_subscription_started = acquisition only (first successful paid in
     const w = setup(); w.paidInvoices = [inv('in_1', 100)];
     await deliver(w, ev('invoice.payment_succeeded', inv('in_1', 100), 10)); await deliver(w, ev('invoice.paid', inv('in_1', 100), 11));
     expect(new Set(conv(w).map((c: any) => c.props.properties.invoice_id)).size).toBe(1);
+  });
+
+  it('PRODUCTION WIRING: the webhook Stripe wrapper passes invoices.list through (read-only) — otherwise every conversion would silently go unreported', async () => {
+    const w = setup(); w.paidInvoices = [inv('in_1', 100)];
+    const wrapped: any = wrapStripeWithIdempotentMapping(w.stripe);
+    expect(typeof wrapped.invoices?.list).toBe('function'); expect(Object.keys(wrapped.invoices)).toEqual(['list']);
+    await handleStripeEvent(wrapped, w.clerk as any, ev('invoice.paid', inv('in_1', 100), 10), { emit: w.emit, alert: w.alert });
+    expect(conv(w)).toHaveLength(1); expect(w.alerts.map((a: any) => a.kind)).not.toContain('conversion_classification_unavailable');
   });
 });
