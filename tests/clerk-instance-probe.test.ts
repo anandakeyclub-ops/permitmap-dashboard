@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { timelineSummary } from '../scripts/forensics/clerk-instance-probe';
+import { timelineSummary } from '../scripts/forensics/clerk-timeline';
 describe('timelineSummary', () => {
   it('groups by UTC day and reports bounds', () => {
     const t = (s: string) => Date.parse(s);

@@ -8,13 +8,8 @@
 import { createClerkClient } from '@clerk/backend';
 import { writeFileSync } from 'node:fs';
 import { readOnly } from '../readonly-guard';
+import { timelineSummary } from './clerk-timeline';
 
-export function timelineSummary(createdAtMs: number[]) {
-  const byDay: Record<string, number> = {};
-  for (const t of createdAtMs) { const d = new Date(t).toISOString().slice(0, 10); byDay[d] = (byDay[d] || 0) + 1; }
-  const sorted = [...createdAtMs].sort((a, b) => a - b);
-  return { count: sorted.length, earliest: sorted.length ? new Date(sorted[0]).toISOString() : null, latest: sorted.length ? new Date(sorted[sorted.length - 1]).toISOString() : null, by_day: Object.fromEntries(Object.entries(byDay).sort()) };
-}
 const mask = (e?: string | null) => (e ? `${e[0]}***@${e.split('@')[1] ?? '?'}` : null);
 const iso = (t?: number | null) => (t ? new Date(t).toISOString() : null);
 
@@ -43,4 +38,4 @@ async function main() {
   console.log('READ-ONLY run.');
 }
 function arg(n: string) { return process.argv.includes(n) ? process.argv[process.argv.indexOf(n) + 1] : undefined; }
-if (process.argv[1] && /clerk-instance-probe/.test(process.argv[1])) main().catch(e => { console.error(e); process.exit(1); });
+main().catch(e => { console.error(e); process.exit(1); });
