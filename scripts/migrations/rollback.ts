@@ -25,10 +25,13 @@ export function buildRollbackManifest(rows: MigrationRow[]): {
   return {
     stripe_restore: buildStripeRollback(rows),
     operational_steps: [
-      'Restore Vercel Production env: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ (dev), CLERK_SECRET_KEY=sk_test_ (dev), CLERK_WEBHOOK_SECRET=(dev)',
-      'Redeploy the prior Vercel deployment (recorded DEPLOYED_COMMIT_BEFORE)',
-      'Leave newly-created prod Clerk users in place (harmless; they are unreferenced once frontend reverts to dev)',
-      'Apply stripe_restore ONLY if Stripe was relinked before the failure (see cutover order: relink AFTER a validated staging check, so most rollbacks need no Stripe restore)',
+      // SAFETY: this template must never tell an operator to point production at a different Clerk instance. Production Clerk
+      // is live (sk_live_/pk_live_); reverting to development keys would orphan every production user and every new checkout.
+      'DO NOT change Vercel Clerk keys (NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY / CLERK_SECRET_KEY) as part of rolling back a Stripe metadata relink. They are paired and belong to the PRODUCTION Clerk instance.',
+      'Restore Stripe metadata by applying stripe_restore (customer + subscription metadata.clerk_user_id back to the recorded old value) with a live Stripe key. This is the ONLY data mutation the relink performs.',
+      'Verify afterwards with scripts/prod-entitlement-reconcile.ts (it refuses a non-production Clerk key and stamps instances.{stripe,clerk} into its report).',
+      'If a deployment must be rolled back, use the Vercel rollback of the recorded prior deployment (DEPLOYED_COMMIT_BEFORE); never edit Clerk keys to do it.',
+      'Any change of Clerk instance is a separate, reviewed cutover runbook, not a rollback step.',
     ],
   };
 }
