@@ -48,8 +48,9 @@ async function emitEvent(event_name: string, props: Record<string, any>) {
   } catch (e) { console.error('GA4 server conversion emit failed:', e); }
 }
 
-// Loud, unmissable diagnostic. The AUTHORITATIVE exactly-once owner alert is the nightly
-// Revenue Integrity sweep (permit_bot); this is the immediate breadcrumb.
+// LOG-ONLY diagnostic: this writes to the Vercel function log and notifies NOBODY. Owner alerting is not done here.
+// It comes from permit-bot's revenue_integrity_watch.py polling /api/internal/revenue-integrity (verify it is actually
+// scheduled and its heartbeat is fresh before relying on it).
 function alertProvisioning(kind: string, detail: Record<string, any>) {
   console.error(`[PROVISIONING_ALERT] ${kind} ${JSON.stringify(detail)}`);
 }
