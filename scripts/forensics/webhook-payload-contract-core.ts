@@ -3,8 +3,8 @@
 // (instead of silently ignoring it because a field moved between API versions). Zero writes anywhere.
 import { handleStripeEvent } from '../../lib/provisioning';
 
-export type Verdict = 'PASS' | 'FAIL_SILENTLY_IGNORED' | 'FAIL_ERROR' | 'FAIL_UNEXPECTED_ALERT' | 'NOT_APPLICABLE' | 'INCONCLUSIVE';
-export interface ContractRow { event_id: string; type: string; api_version: string | null; verdict: Verdict; expected_sub: string | null; retrieved_subs: string[]; alerts: string[]; would_write_clerk: number; would_write_stripe: string[]; note?: string }
+export type Verdict = 'PASS' | 'FAIL_SILENTLY_IGNORED' | 'FAIL_WRONG_SUBSCRIPTION' | 'FAIL_ERROR' | 'FAIL_UNEXPECTED_ALERT' | 'NOT_APPLICABLE' | 'INCONCLUSIVE';
+export interface ContractRow { event_id: string; type: string; api_version: string | null; verdict: Verdict; expected_sub: string | null; retrieved_subs: string[]; alerts: string[]; would_write_clerk: number; would_write_stripe: string[]; resolved_clerk_users: string[]; note?: string }
 
 const HANDLED = new Set(['checkout.session.completed', 'invoice.payment_succeeded', 'invoice.paid', 'invoice.payment_failed', 'customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted']);
 // Independent of the handler: every place Stripe has ever put the subscription reference on an invoice.
@@ -20,15 +20,18 @@ export function expectedSubscriptionId(ev: any): string | null {
 export async function checkEventContract(ev: any, deps: { stripeRead: any; clerkUsers: Map<string, Record<string, any>> }): Promise<ContractRow> {
   const base = { event_id: ev.id, type: ev.type, api_version: ev.api_version ?? null };
   const expected = expectedSubscriptionId(ev);
-  if (!HANDLED.has(ev.type)) return { ...base, verdict: 'NOT_APPLICABLE', expected_sub: expected, retrieved_subs: [], alerts: [], would_write_clerk: 0, would_write_stripe: [] };
+  if (!HANDLED.has(ev.type)) return { ...base, verdict: 'NOT_APPLICABLE', expected_sub: expected, retrieved_subs: [], alerts: [], would_write_clerk: 0, would_write_stripe: [], resolved_clerk_users: [] };
   // invoices with nothing paid / not subscription-related are legitimately ignored
   if ((ev.type === 'invoice.payment_succeeded' || ev.type === 'invoice.paid') && !((ev.data.object.amount_paid || 0) > 0))
-    return { ...base, verdict: 'NOT_APPLICABLE', expected_sub: expected, retrieved_subs: [], alerts: [], would_write_clerk: 0, would_write_stripe: [], note: 'amount_paid is 0 — handler ignores by design' };
+    return { ...base, verdict: 'NOT_APPLICABLE', expected_sub: expected, retrieved_subs: [], alerts: [], would_write_clerk: 0, would_write_stripe: [], resolved_clerk_users: [], note: 'amount_paid is 0 — handler ignores by design' };
   if (ev.type.startsWith('invoice.') && !expected) // a one-off invoice, not a subscription invoice
-    return { ...base, verdict: 'NOT_APPLICABLE', expected_sub: null, retrieved_subs: [], alerts: [], would_write_clerk: 0, would_write_stripe: [], note: 'no subscription reference anywhere on the invoice' };
+    return { ...base, verdict: 'NOT_APPLICABLE', expected_sub: null, retrieved_subs: [], alerts: [], would_write_clerk: 0, would_write_stripe: [], resolved_clerk_users: [], note: 'no subscription reference anywhere on the invoice' };
 
   const retrieved: string[] = []; const alerts: string[] = []; const stripeWrites: string[] = []; let clerkWrites = 0;
+  // SYNTHETIC Clerk: this checker certifies PAYLOAD SHAPE, not user existence. Any user id the handler resolves is auto-created in a
+  // throw-away overlay (and recorded), so "target user not found in our fake" can never masquerade as a contract failure.
   const overlay = new Map([...deps.clerkUsers].map(([k, v]) => [k, JSON.parse(JSON.stringify(v))]));
+  const resolved = new Set<string>(); const ensure = (id: string) => { resolved.add(id); if (!overlay.has(id)) overlay.set(id, {}); };
   const stripe = {
     webhooks: { constructEvent: () => { throw new Error('unused'); } },
     subscriptions: {
@@ -40,18 +43,26 @@ export async function checkEventContract(ev: any, deps: { stripeRead: any; clerk
   };
   const clerk: any = { users: {
     getUserList: async () => ({ totalCount: 0, data: [] }),
-    getUser: async (id: string) => { if (!overlay.has(id)) throw Object.assign(new Error('Not Found'), { status: 404 }); return { publicMetadata: JSON.parse(JSON.stringify(overlay.get(id))) }; },
-    updateUserMetadata: async (id: string, p: any) => { clerkWrites++; if (!overlay.has(id)) throw Object.assign(new Error('Not Found'), { status: 404 }); overlay.set(id, { ...overlay.get(id), ...JSON.parse(JSON.stringify(p.publicMetadata)) }); return {}; },
-    createUser: async () => { clerkWrites++; return { id: 'user_DRYRUN' }; },
+    getUser: async (id: string) => { ensure(id); return { publicMetadata: JSON.parse(JSON.stringify(overlay.get(id))) }; },
+    updateUserMetadata: async (id: string, p: any) => { clerkWrites++; ensure(id); overlay.set(id, { ...overlay.get(id), ...JSON.parse(JSON.stringify(p.publicMetadata)) }); return {}; },
+    createUser: async () => { clerkWrites++; ensure('user_SYNTHETIC_NEW'); return { id: 'user_SYNTHETIC_NEW' }; },
   } };
-  const row = (verdict: Verdict, note?: string): ContractRow => ({ ...base, verdict, expected_sub: expected, retrieved_subs: retrieved, alerts, would_write_clerk: clerkWrites, would_write_stripe: stripeWrites, note });
+  const row = (verdict: Verdict, note?: string): ContractRow => ({ ...base, verdict, expected_sub: expected, retrieved_subs: retrieved, alerts, would_write_clerk: clerkWrites, would_write_stripe: stripeWrites, resolved_clerk_users: [...resolved], note });
   try { await handleStripeEvent(stripe as any, clerk, JSON.parse(JSON.stringify(ev)), { emit: async () => {}, alert: (k: string) => { alerts.push(k); } }); }
-  catch (e: any) { return row('FAIL_ERROR', String(e?.message || e).slice(0, 160)); }
+  catch (e: any) {
+    const m = String(e?.message || e).slice(0, 160);
+    // The referenced subscription no longer exists in Stripe: we cannot replay it, which says nothing about payload shape.
+    return /No such subscription|resource_missing/i.test(m) ? row('INCONCLUSIVE', `subscription not retrievable: ${m}`) : row('FAIL_ERROR', m);
+  }
   // deleted events are applied from the event snapshot and need no retrieve; everything else must have looked up the referenced subscription.
   if (ev.type !== 'customer.subscription.deleted' && expected && !retrieved.includes(expected) && !ev.type.startsWith('customer.subscription.'))
     return row('FAIL_SILENTLY_IGNORED', 'handler never looked up the subscription this event refers to');
-  const bad = alerts.filter(a => ['unknown_price', 'unknown_subscription_status', 'webhook_processing_error', 'identity_missing', 'stripe_read_failed'].includes(a));
+  const wrong = retrieved.filter(id => id !== expected);
+  if (wrong.length) return row('FAIL_WRONG_SUBSCRIPTION', `handler retrieved ${[...new Set(wrong)].join(',')} but the event refers to ${expected}`);
+  const bad = alerts.filter(a => ['unknown_price', 'unknown_subscription_status', 'webhook_processing_error'].includes(a));
   if (bad.length) return row('FAIL_UNEXPECTED_ALERT', bad.join(','));
+  // Identity could not be derived from the payload/metadata (a data question — e.g. legacy/manual subscription — not a shape question).
+  if (alerts.some(a => a === 'identity_missing_at_checkout' || a === 'no_email_no_identity')) return row('INCONCLUSIVE', 'payload parsed, but no Clerk identity derivable from this subscription (data issue, not payload shape)');
   return row('PASS');
 }
 

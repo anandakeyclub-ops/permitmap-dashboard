@@ -47,6 +47,23 @@ describe('webhook payload contract (new API version shapes)', () => {
     expect((await run(world(), E('invoice.paid', { id: 'in_x', amount_paid: 500 }))).verdict).toBe('NOT_APPLICABLE');
     expect((await run(world(), E('customer.created', {}))).verdict).toBe('NOT_APPLICABLE');
   });
+  it('REGRESSION: a handler write to a resolved user that is absent from the fake Clerk is a PASS (was a false "Not Found" failure)', async () => {
+    const r = await checkEventContract(E('customer.subscription.updated', dahliaSubscription()), { stripeRead: world().stripe, clerkUsers: new Map() });
+    expect(r.verdict).toBe('PASS'); expect(r.would_write_clerk).toBeGreaterThan(0); expect(r.resolved_clerk_users).toContain('user_1');
+  });
+  it('FAILS when the handler retrieves something other than the referenced subscription (e.g. an EXPANDED invoice.subscription object passed straight through)', async () => {
+    const w = world(); const orig = w.stripe.subscriptions.retrieve; w.stripe.subscriptions.retrieve = async (id: any) => orig(typeof id === 'object' ? id.id : id);
+    const r = await run(w, E('invoice.paid', { id: 'in_1', amount_paid: 14900, customer: 'cus_1', subscription: { id: 'sub_A' } }));
+    expect(r.verdict).toBe('FAIL_WRONG_SUBSCRIPTION');
+  });
+  it('subscription that no longer exists in Stripe is INCONCLUSIVE, not a payload failure', async () => {
+    const r = await run(world(), E('invoice.paid', dahliaInvoice({ parent: { subscription_details: { subscription: 'sub_GONE' } }, lines: { data: [] } })));
+    expect(r.verdict).toBe('INCONCLUSIVE');
+  });
+  it('a subscription with no derivable identity is INCONCLUSIVE (data issue), never a shape failure', async () => {
+    const w = makeWorld(); w.setSub('sub_A', { status: 'active', price: PRICE.pro }); w.subs.get('sub_A').metadata = {};
+    const r = await run(w, E('customer.subscription.created', w.sub('sub_A'))); expect(['PASS', 'INCONCLUSIVE']).toContain(r.verdict);
+  });
   it('summarize groups by API version and only certifies with zero failures and at least one PASS', () => {
     const s = summarize([{ verdict: 'PASS', api_version: '2026-03-25.dahlia' } as any, { verdict: 'FAIL_ERROR', api_version: '2023-10-16' } as any]);
     expect(s.certified).toBe(false); expect(s.by_api_version['2026-03-25.dahlia']).toEqual({ PASS: 1 });
