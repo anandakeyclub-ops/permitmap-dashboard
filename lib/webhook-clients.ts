@@ -51,6 +51,8 @@ export function wrapStripeWithIdempotentMapping(stripe: any) {
 
   return {
     webhooks: stripe.webhooks,
+    // READ-ONLY paid-invoice history (acquisition vs renewal classification).
+    ...(stripe.invoices?.list ? { invoices: { list: stripe.invoices.list.bind(stripe.invoices) } } : {}),
     subscriptions: {
       retrieve: rawSubRetrieve,
       // READ-ONLY lookups used to reconcile duplicate subscriptions (never mutate Stripe).

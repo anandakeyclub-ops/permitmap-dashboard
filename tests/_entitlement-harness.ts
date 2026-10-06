@@ -68,6 +68,7 @@ export function makeWorld() {
     },
   });
 
+  world.paidInvoices = [] as any[]; world.failInvoiceList = false; world.noInvoiceApi = false;
   world.stripe = {
     webhooks: { constructEvent: () => { throw new Error('not used'); } },
     subscriptions: guard('subscriptions', {
@@ -92,6 +93,10 @@ export function makeWorld() {
         return { data: [...subs.values()].filter(s => m && s.metadata?.clerk_user_id === m[1]).map(s => JSON.parse(JSON.stringify(s))) };
       },
     }),
+    get invoices() {
+      if (world.noInvoiceApi) return undefined;
+      return { list: async (p: any) => { if (world.failInvoiceList) throw new Error('stripe invoices unavailable'); return { data: world.paidInvoices.filter((i: any) => i.subscription === p.subscription).map((i: any) => JSON.parse(JSON.stringify(i))), has_more: false }; } };
+    },
     customers: guard('customers', {
       retrieve: async () => ({ id: 'cus', email: EMAIL }),
       update: async (_id: string, params: any) => {
@@ -124,7 +129,7 @@ export function makeWorld() {
   };
   return world as {
     failRetrieve: boolean; emits: typeof emits; alerts: typeof alerts; stripeUpdates: typeof stripeUpdates;
-    forbiddenStripeCalls: string[]; stripe: any; clerk: any; emit: any; alert: any;
+    forbiddenStripeCalls: string[]; paidInvoices: any[]; failInvoiceList: boolean; noInvoiceApi: boolean; stripe: any; clerk: any; emit: any; alert: any;
     setSub: (id: string, p: SubOpts) => void; sub: (id: string) => any; lagRetrieve: (id: string, patch: any) => void;
     clerkWrites: () => number; subs: Map<string, any>; users: Map<string, any>;
   };
