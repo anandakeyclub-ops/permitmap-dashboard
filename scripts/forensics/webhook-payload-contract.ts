@@ -2,8 +2,10 @@
  * READ-ONLY. Pulls recent real events of the handled types from LIVE Stripe (Events: Read needed) and verifies the production handler
  * acts on each one, grouped by the API version the payload was rendered with. Zero writes (Stripe writes blocked, Clerk is an overlay).
  *   STRIPE_SECRET_KEY=rk_live_… npx vite-node scripts/forensics/webhook-payload-contract.ts [--out webhook-contract.json]
- * No Clerk key is needed: identity lookups use an empty overlay, so a "would write" count of 0 for an unknown user is expected. What matters is
- * the verdict: the handler looked up the right subscription, raised no unknown_price / error alerts.
+ * No Clerk key is needed: Clerk is a synthetic in-memory overlay that auto-creates a user for each identity the handler resolves (recorded in
+ * resolved_clerk_users). A successful row therefore legitimately shows would_write_clerk >= 1; those are SIMULATED writes against the overlay only,
+ * and nothing is written to Clerk or Stripe. What matters is the verdict: the handler looked up the right subscription, raised no
+ * unknown_price / error alerts.
  */
 import Stripe from 'stripe';
 import { writeFileSync } from 'node:fs';

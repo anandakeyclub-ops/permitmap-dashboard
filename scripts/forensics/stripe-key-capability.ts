@@ -1,6 +1,6 @@
 /**
  * READ-ONLY. Proves what the DEPLOYED PermitMap STRIPE_SECRET_KEY can read (specifically invoices.list, needed by the renewal-conversion fix).
- * Pull the Vercel *Production* STRIPE_SECRET_KEY locally (e.g. `vercel env pull`), never paste it anywhere, then:
+ * Load the actual deployed Production STRIPE_SECRET_KEY locally through an authorized secret source; never paste or persist it, then:
  *   STRIPE_SECRET_KEY=… npx vite-node scripts/forensics/stripe-key-capability.ts
  * Prints only the key's SHAPE (prefix class) and per-probe OK / PERMISSION_DENIED. Write permissions (subscription/customer updates used by
  * the trial interlock and mapping stamps) are intentionally NOT probed — that would require a write.
