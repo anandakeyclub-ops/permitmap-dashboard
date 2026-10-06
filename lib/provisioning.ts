@@ -101,6 +101,8 @@ export interface StripeLike {
     search?: (p: any) => Promise<{ data: any[] }>;
   };
   customers: { retrieve: (id: string) => Promise<any>; update: (id: string, p: any) => Promise<any> };
+  // Optional READ-ONLY: paid-invoice history, used only to tell the acquisition conversion from renewals.
+  invoices?: { list: (p: any) => Promise<{ data: any[]; has_more?: boolean }> };
   webhooks: { constructEvent: (body: string, sig: string, secret: string) => any };
 }
 type Alert = (kind: string, detail: Record<string, any>) => void;
@@ -356,6 +358,24 @@ export async function reconcileSubscription(
   return { outcome, decision, sub, tier };
 }
 
+
+// Conversion rule (decided): a subscription's FIRST successful paid invoice ever is the acquisition conversion; every later paid
+// invoice is a renewal and must not be reported as a new conversion. billing_reason cannot be used: with a trial the first invoice is $0
+// ('subscription_create') and the first PAID one is a 'subscription_cycle'. READ-ONLY. Returns null when it cannot be determined
+// (the caller then does NOT emit — never guess a conversion — and entitlement handling continues unaffected).
+export async function isAcquisitionInvoice(stripe: StripeLike, subId: string, inv: any): Promise<boolean | null> {
+  if (!stripe.invoices?.list) return null;
+  try {
+    const page = await stripe.invoices.list({ subscription: subId, status: 'paid', limit: 100 });
+    if (page.has_more) return false; // >100 paid invoices: this is certainly not the first
+    const paid = new Map<string, any>();
+    for (const i of page.data || []) if ((i.amount_paid || 0) > 0) paid.set(i.id, i);
+    if ((inv.amount_paid || 0) > 0 && inv.id) paid.set(inv.id, inv); // the event's own invoice counts even if the list lags
+    const ordered = [...paid.values()].sort((a, b) => ((a.created || 0) - (b.created || 0)) || String(a.id).localeCompare(String(b.id)));
+    return ordered.length > 0 && ordered[0].id === inv.id;
+  } catch { return null; }
+}
+
 const NO_EMIT = new Set<Outcome>(['duplicate_event', 'stale_event', 'skipped']);
 
 // Route the parsed Stripe event to provisioning. Returns nothing; throws on transient
@@ -384,11 +404,14 @@ export async function handleStripeEvent(
     // The subscription reference moved under `parent.subscription_details` on newer Stripe API versions.
     const subId = (inv.subscription || inv.parent?.subscription_details?.subscription) as string;
     if ((inv.amount_paid || 0) > 0 && subId) {
+      // Classified BEFORE any state change (read-only), so a transient failure cannot lose the conversion via the replay guard.
+      const acquisition = await isAcquisitionInvoice(stripe, subId, inv);
+      if (acquisition === null) alert('conversion_classification_unavailable', { subscription_id: subId, invoice_id: inv.id });
       const sub = await stripe.subscriptions.retrieve(subId);
       const email = inv.customer_email || (await emailFromCustomer(stripe, sub.customer as string));
       const r = await reconcileSubscription(stripe, clerk, alert, { ...sub, id: sub.id || subId }, { email, useEventSnapshot: true, ...ctx });
-      if (r.decision.action === 'grant' && !NO_EMIT.has(r.outcome)) {
-        await emit('paid_subscription_started', { stripe_subscription_id: subId, email: email || undefined, plan: r.tier!, properties: { invoice_id: inv.id, amount_paid: inv.amount_paid, clerk_user_id: resolveClerkUserId(sub.metadata, null) || undefined } });
+      if (r.decision.action === 'grant' && !NO_EMIT.has(r.outcome) && acquisition === true) {
+        await emit('paid_subscription_started', { stripe_subscription_id: subId, email: email || undefined, plan: r.tier!, properties: { conversion_basis: 'first_paid_invoice', invoice_id: inv.id, amount_paid: inv.amount_paid, clerk_user_id: resolveClerkUserId(sub.metadata, null) || undefined } });
       }
     }
   } else if (event.type === 'invoice.payment_failed') {
