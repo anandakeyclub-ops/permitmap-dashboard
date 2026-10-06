@@ -54,11 +54,11 @@ export async function checkEventContract(ev: any, deps: { stripeRead: any; clerk
     // The referenced subscription no longer exists in Stripe: we cannot replay it, which says nothing about payload shape.
     return /No such subscription|resource_missing/i.test(m) ? row('INCONCLUSIVE', `subscription not retrievable: ${m}`) : row('FAIL_ERROR', m);
   }
+  const wrong = retrieved.filter((id: any) => id !== expected);
+  if (wrong.length) return row('FAIL_WRONG_SUBSCRIPTION', `handler retrieved ${[...new Set(wrong.map(x => typeof x === 'string' ? x : JSON.stringify(x)))].join(',')} but the event refers to ${expected}`);
   // deleted events are applied from the event snapshot and need no retrieve; everything else must have looked up the referenced subscription.
   if (ev.type !== 'customer.subscription.deleted' && expected && !retrieved.includes(expected) && !ev.type.startsWith('customer.subscription.'))
     return row('FAIL_SILENTLY_IGNORED', 'handler never looked up the subscription this event refers to');
-  const wrong = retrieved.filter(id => id !== expected);
-  if (wrong.length) return row('FAIL_WRONG_SUBSCRIPTION', `handler retrieved ${[...new Set(wrong)].join(',')} but the event refers to ${expected}`);
   const bad = alerts.filter(a => ['unknown_price', 'unknown_subscription_status', 'webhook_processing_error'].includes(a));
   if (bad.length) return row('FAIL_UNEXPECTED_ALERT', bad.join(','));
   // Identity could not be derived from the payload/metadata (a data question — e.g. legacy/manual subscription — not a shape question).
