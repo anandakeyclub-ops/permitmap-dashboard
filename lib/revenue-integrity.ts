@@ -187,8 +187,9 @@ export interface IntegrityInputs {
 
 /**
  * GREEN       = every required check completed and found no actionable defect.
- * RED         = reconciliation completed and found at least one actionable defect (even if another check was unavailable).
- * UNAVAILABLE = truth could not be established (a required check could not complete, or the instances are wrong) and no defect was proven.
+ * UNAVAILABLE = ANY required check could not complete (or the instances are wrong). Takes precedence over everything: findings that were
+ *               already proven are still included for diagnostics, but the verdict stays UNAVAILABLE until all required checks completed.
+ * RED         = every required check completed and at least one actionable defect exists.
  * HTTP success is never evidence of health: only status === 'GREEN' is.
  */
 export function buildIntegrityReport(i: IntegrityInputs): IntegrityReport {
@@ -208,9 +209,11 @@ export function buildIntegrityReport(i: IntegrityInputs): IntegrityReport {
     informational = [...w.informational]; actionable = [];
   }
 
+  // Precedence: a blind required check always wins. RED/GREEN are only claimable once EVERY required check completed.
+  // Findings already proven are still returned (diagnostics) but never upgrade an incomplete run to RED.
   let status: IntegrityStatus;
-  if (recon.status === 'COMPLETE' && actionable.length) status = 'RED';
-  else if (degraded.length) status = 'UNAVAILABLE';
+  if (degraded.length) status = 'UNAVAILABLE';
+  else if (actionable.length) status = 'RED';
   else status = 'GREEN';
 
   return {

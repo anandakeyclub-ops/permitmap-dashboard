@@ -106,10 +106,13 @@ describe('status semantics', () => {
     expect(r.status).toBe('UNAVAILABLE');
     expect(r.degraded_checks).toEqual(['webhook_registration']);
   });
-  it('RED outranks a degraded secondary check (a proven defect is still reported)', () => {
+  it('UNAVAILABLE outranks RED: reconciliation COMPLETE + actionable finding + webhook check UNAVAILABLE => UNAVAILABLE (diagnostics kept)', () => {
     const r = buildIntegrityReport({ now: NOW, instances: { stripe: 'live', clerk: 'production' }, reconciliation: { ok: true, subs: [sub('s1', 'u1', 'canceled')], users: goodUsers }, webhook: { ok: false, reason: 'x' } });
-    expect(r.status).toBe('RED');
+    expect(r.status).toBe('UNAVAILABLE');
     expect(r.degraded_checks).toEqual(['webhook_registration']);
+    expect(r.counts.actionable_by_class).toEqual({ ACCESS_WITHOUT_ENTITLED_SUBSCRIPTION: 1 }); // proven finding still reported
+    expect(r.findings).toHaveLength(1);
+    expect(r.unavailable_reason).toContain('webhook_registration');
   });
 });
 

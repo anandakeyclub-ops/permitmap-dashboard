@@ -104,6 +104,13 @@ describe('verdicts', () => {
     const r = await call(); const text = await r.text();
     expect(r.status).toBe(503); expect(JSON.parse(text).status).toBe('UNAVAILABLE'); expect(text).not.toMatch(/sk_live|exploded/);
   });
+  it('stale access found but webhook-endpoint read fails => UNAVAILABLE/503, not RED/200', async () => {
+    h.subs[0].status = 'canceled';
+    h.endpoints = null as any;
+    const r = await call(); const b = await r.json();
+    expect(r.status).toBe(503); expect(b.status).toBe('UNAVAILABLE');
+    expect(b.counts.actionable_by_class).toEqual({ ACCESS_WITHOUT_ENTITLED_SUBSCRIPTION: 1 });
+  });
   it('webhook-endpoint read failure alone -> UNAVAILABLE even though reconciliation is clean', async () => {
     h.endpoints = null as any;
     const r = await call(); expect((await r.json()).status).toBe('UNAVAILABLE');

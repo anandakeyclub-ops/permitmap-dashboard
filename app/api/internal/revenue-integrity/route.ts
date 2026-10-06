@@ -1,9 +1,10 @@
 // Authenticated, READ-ONLY revenue-integrity monitor. Polled by permit-bot (scripts/revenue_integrity_watch.py).
 //
 // Contract (see lib/revenue-integrity.ts):
-//   GREEN       200  reconciliation completed, no actionable defects
-//   RED         200  reconciliation completed, >=1 actionable defect (sanitized findings + fingerprint in body)
-//   UNAVAILABLE 503  truth could not be established (instance mismatch, Stripe/Clerk failure). NOT a billing finding.
+//   GREEN       200  EVERY required check completed, no actionable defects
+//   RED         200  every required check completed, >=1 actionable defect (sanitized findings + fingerprint in body)
+//   UNAVAILABLE 503  ANY required check could not complete (instance mismatch, Stripe/Clerk/webhook-endpoint failure). Takes precedence
+//                    over RED: already-proven findings are included for diagnostics only. NOT a billing finding.
 //   401 bad/missing bearer token, 503 {status:'UNAVAILABLE', reason:'not_configured'} when REVENUE_INTEGRITY_TOKEN is unset/weak.
 // A caller must read body.status; HTTP 200 alone is never evidence of health.
 //
