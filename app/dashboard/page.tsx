@@ -22,6 +22,7 @@ import CallList from './_components/CallList';
 import DigestCard from './_components/DigestCard';
 import SubscriberValueCard from './_components/SubscriberValueCard';
 import TodayCommandCenter from './_components/TodayCommandCenter';
+import FirstWorkCard from './_components/FirstWorkCard';
 import UpgradeModal from './_components/UpgradeModal';
 import PermitDrawer from './_components/PermitDrawer';
 import DashboardLoadingSkeleton from './_components/DashboardLoadingSkeleton';
@@ -698,6 +699,8 @@ export default function Dashboard() {
                   marketLabel={summary.label}
                   onOpportunities={goToQueue} onSaved={() => setActiveTab('saved')} />
               )}
+
+              {!isPreview && <FirstWorkCard getToken={getToken} />}
 
               {/* Secondary retention/progress surfaces moved out of the default money-making
                   path. They render contextually in Briefing below, keeping Opportunities above-fold. */}
