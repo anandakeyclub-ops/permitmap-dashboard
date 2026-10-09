@@ -82,6 +82,16 @@ function ReasonChip({ r }: { r: Reason }) {
   );
 }
 
+function ContactabilityBadge({ value }: { value: string | undefined }) {
+  const v = value || 'none';
+  const label = v === 'direct' ? 'Direct contact' : v === 'identity_only' ? 'Identity available' : 'Permit intelligence';
+  const color = v === 'direct' ? '#86efac' : v === 'identity_only' ? '#fde68a' : '#94a3b8';
+  return <span title={v === 'direct' ? 'Source includes phone or email.' : v === 'identity_only' ? 'Source identifies a party but does not include direct phone/email.' : 'No direct contact or named party is present in the permit source.'}
+    style={{fontSize:11,fontWeight:700,color,border:`1px solid ${color}55`,borderRadius:999,padding:'3px 8px'}}>
+    {label}
+  </span>;
+}
+
 function ScoreBadge({ score, size = 44 }: { score: number; size?: number }) {
   const c = scoreColor(score);
   return (
@@ -259,6 +269,7 @@ export default function CallList({ scored, topZips, getToken, fixedTrade, dateBa
                   <span style={{ color: '#22c55e', fontWeight: 600 }}>{fmtVal(hero.FINAL_VALUATION ?? hero.final_valuation)}</span>
                   <span><Clock size={12} style={{ verticalAlign: 'middle' }} /> {fmtAge(effectivePermitDate(hero, dateBasis))}</span>
                   {(hero.ZIP || hero.zip) && <span><MapPin size={12} style={{ verticalAlign: 'middle' }} /> {hero.ZIP || hero.zip}</span>}
+                  <ContactabilityBadge value={hero.contactability} />
                 </div>
                 {(hero.PERMIT_DESCRIPTION || hero.permit_description) && (
                   <div style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>
@@ -302,6 +313,7 @@ export default function CallList({ scored, topZips, getToken, fixedTrade, dateBa
                     <span style={{ color: '#22c55e', fontWeight: 600 }}>{fmtVal(p.FINAL_VALUATION ?? p.final_valuation)}</span>
                     <span>{fmtAge(effectivePermitDate(p, dateBasis))}</span>
                     {(p.ZIP || p.zip) && <span>ZIP {p.ZIP || p.zip}</span>}
+                    <ContactabilityBadge value={p.contactability} />
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {deriveReasons(p, hotZips, dateBasis).map((r, j) => <ReasonChip key={j} r={r} />)}
