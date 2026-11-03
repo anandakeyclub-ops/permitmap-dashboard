@@ -13,12 +13,12 @@ const openedRow = { OPENED_DATE: '2026-07-01' };            // Citrus shape: ope
 const lowerRow  = { opened_date: '2026-06-15' };            // lowercase fallback
 
 describe('normalizeBasis', () => {
-  it("maps 'opened' to opened and everything else (incl. junk/undefined) to issued", () => {
+  it("supports explicit opened/issued and holds missing or unknown basis", () => {
     expect(normalizeBasis('opened')).toBe('opened');
     expect(normalizeBasis('issued')).toBe('issued');
-    expect(normalizeBasis('')).toBe('issued');
-    expect(normalizeBasis(undefined)).toBe('issued');
-    expect(normalizeBasis('nonsense')).toBe('issued');
+    expect(normalizeBasis('')).toBe('unknown');
+    expect(normalizeBasis(undefined)).toBe('unknown');
+    expect(normalizeBasis('nonsense')).toBe('unknown');
   });
 });
 
@@ -52,14 +52,27 @@ describe('dateLabel', () => {
     expect(dateLabel({ date_basis: 'opened' })).toBe(DEFAULT_DATE_LABEL.opened);
     expect(dateLabel({ date_basis: 'issued' })).toBe(DEFAULT_DATE_LABEL.issued);
     expect(dateLabel({ date_label: '   ', date_basis: 'opened' })).toBe(DEFAULT_DATE_LABEL.opened);
-    expect(dateLabel(null)).toBe(DEFAULT_DATE_LABEL.issued);
+    expect(dateLabel(null)).toBe(DEFAULT_DATE_LABEL.unknown);
   });
 });
 
 describe('basisOf', () => {
-  it('reads the basis from coverage, defaulting to issued', () => {
+  it('reads explicit basis and holds absent metadata', () => {
     expect(basisOf({ date_basis: 'opened' })).toBe('opened');
     expect(basisOf({ date_basis: 'issued' })).toBe('issued');
-    expect(basisOf(null)).toBe('issued');
+    expect(basisOf(null)).toBe('unknown');
+  });
+});
+
+describe('unverified date boundaries', () => {
+  it('does not read issue-shaped fields when metadata is missing or unsupported', () => {
+    for (const basis of [undefined, null, '', 'inspection', 'application', 'updated', 'record']) {
+      expect(effectivePermitDate(issuedRow, basis)).toBe('');
+      expect(dateLabel({date_basis: basis, date_label: 'Permit issued'})).toBe('Date not verified');
+    }
+  });
+  it('never treats generic permit_date as a verified issue date', () => {
+    expect(effectivePermitDate({permit_date: '2026-11-01'}, 'issued')).toBe('');
+    expect(effectivePermitDate({permit_date: '2026-11-01', issue_date: '2026-10-30'}, 'issued')).toBe('2026-10-30');
   });
 });

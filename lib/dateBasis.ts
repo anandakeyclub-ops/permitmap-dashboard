@@ -7,23 +7,25 @@
 // - opened counties  -> effectivePermitDate = OPENED_DATE       (record-opened date, e.g. Citrus)
 // OPENED_DATE is never copied into an issue-date field and never fabricated.
 
-export type DateBasis = 'issued' | 'opened';
+export type DateBasis = 'issued' | 'opened' | 'unknown';
 
 // Candidate row keys per basis (UPPER_SNAKE + lowercase fallbacks), priority order.
 export const DATE_BASIS_FIELDS: Record<DateBasis, string[]> = {
-  issued: ['LAST_ISSUED_DATE', 'last_issued_date', 'ISSUED_DT', 'issued_dt', 'permit_date', 'issue_date'],
+  issued: ['LAST_ISSUED_DATE', 'last_issued_date', 'ISSUED_DT', 'issued_dt', 'issue_date'],
   opened: ['OPENED_DATE', 'opened_date'],
+  unknown: [],
 };
 
 // Fallback labels when coverage.date_label is absent (e.g. coverage fetch failed).
 export const DEFAULT_DATE_LABEL: Record<DateBasis, string> = {
   issued: 'Permit issued',
   opened: 'Record opened',
+  unknown: 'Date not verified',
 };
 
-/** Normalize an arbitrary basis value to a supported DateBasis (defaults to 'issued'). */
+/** Normalize an arbitrary basis value to a supported DateBasis (unknown values fail closed). */
 export function normalizeBasis(basis: string | null | undefined): DateBasis {
-  return basis === 'opened' ? 'opened' : 'issued';
+  return basis === 'opened' || basis === 'issued' ? basis : 'unknown';
 }
 
 /** The date to display/sort/export for a permit, per the county's configured basis.
@@ -40,11 +42,12 @@ export function effectivePermitDate(row: Record<string, any>, basis: string | nu
 /** The label to show for the date dimension: coverage.date_label wins; else the basis default. */
 export function dateLabel(coverage: { date_label?: string | null; date_basis?: string | null } | null | undefined): string {
   const lbl = coverage?.date_label;
+  if (normalizeBasis(coverage?.date_basis) === 'unknown') return DEFAULT_DATE_LABEL.unknown;
   if (lbl && lbl.trim()) return lbl.trim();
   return DEFAULT_DATE_LABEL[normalizeBasis(coverage?.date_basis)];
 }
 
-/** The basis to use for a county from its coverage (defaults to 'issued' when unknown). */
+/** The basis to use for a county from its coverage (unknown when not explicitly supported). */
 export function basisOf(coverage: { date_basis?: string | null } | null | undefined): DateBasis {
   return normalizeBasis(coverage?.date_basis);
 }

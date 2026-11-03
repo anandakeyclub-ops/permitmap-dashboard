@@ -24,7 +24,7 @@ export const PERMIT_DETAIL_FIELDS: PermitField[] = [
   { label: 'Permit Type',   keys: ['RECORD_TYPE', 'record_type', 'permit_type'], kind: 'text' },
   { label: 'Description',   keys: ['PERMIT_DESCRIPTION', 'permit_description', 'description'], kind: 'text' },
   { label: 'Status',       keys: ['STATUS', 'status'], kind: 'text' },
-  { label: 'Issue Date',   keys: ['LAST_ISSUED_DATE', 'last_issued_date', 'ISSUED_DT', 'issued_dt', 'permit_date', 'issue_date'], kind: 'date' },
+  { label: 'Issue Date',   keys: ['LAST_ISSUED_DATE', 'last_issued_date', 'ISSUED_DT', 'issued_dt', 'issue_date'], kind: 'date' },
   { label: 'Address',      keys: ['FULL_ADDRESS', 'full_address', 'address'], kind: 'text' },
   { label: 'Owner',        keys: ['OWNER_NAME', 'owner_name', 'owner'], kind: 'text' },
   { label: 'Contractor',   keys: ['CONTRACTOR_NAME', 'contractor_name', 'contractor'], kind: 'text' },
@@ -82,8 +82,8 @@ import { DATE_BASIS_FIELDS, DEFAULT_DATE_LABEL, normalizeBasis } from './dateBas
 /** PERMIT_DETAIL_FIELDS with the date row adapted to the county's basis/label. Omitted opts →
  *  the static issued-basis list (back-compat with the Contractor Profile and existing tests). */
 export function permitDetailFields(opts?: { dateLabel?: string | null; dateBasis?: string | null }): PermitField[] {
-  const basis = normalizeBasis(opts?.dateBasis);
-  const label = (opts?.dateLabel && opts.dateLabel.trim()) ? opts.dateLabel.trim() : DEFAULT_DATE_LABEL[basis];
+  const basis = normalizeBasis(opts === undefined ? 'issued' : opts.dateBasis);
+  const label = basis === 'unknown' ? DEFAULT_DATE_LABEL.unknown : (opts?.dateLabel && opts.dateLabel.trim()) ? opts.dateLabel.trim() : DEFAULT_DATE_LABEL[basis];
   return PERMIT_DETAIL_FIELDS.map((f) =>
     f.label === 'Issue Date' ? { label, keys: DATE_BASIS_FIELDS[basis], kind: 'date' as PermitFieldKind } : f,
   );

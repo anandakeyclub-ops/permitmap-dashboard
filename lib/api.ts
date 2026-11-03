@@ -93,7 +93,7 @@ export async function getCoverage(
     contractor_availability_pct: typeof j.contractor_availability_pct === 'number' ? j.contractor_availability_pct : null,
     valuation_availability_pct: typeof j.valuation_availability_pct === 'number' ? j.valuation_availability_pct : null,
     description_availability_pct: typeof j.description_availability_pct === 'number' ? j.description_availability_pct : null,
-    date_basis: j.date_basis ?? 'issued',
+    date_basis: j.date_basis ?? 'unknown',
     date_label: j.date_label ?? null,
     date_range_available: typeof j.date_range_available === 'boolean' ? j.date_range_available : null,
   };
