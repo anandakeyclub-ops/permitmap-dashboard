@@ -2,7 +2,7 @@
 // download trigger lives in the component (keeps this module unit-testable). The caller passes
 // the SAME already-filtered/authorized rows that are visible on screen; export never fetches.
 
-import { effectivePermitDate, type DateBasis } from './dateBasis';
+import { effectivePermitDate, normalizeBasis, DEFAULT_DATE_LABEL, type DateBasis } from './dateBasis';
 
 // Options: the county's date dimension, so the date column header + value are correct
 // (e.g. "Record opened" + OPENED_DATE for Citrus). Omitted → issued basis / "Issue Date"
@@ -62,7 +62,9 @@ export function escapeCsvField(raw: any): string {
 
 /** The date column header for a given basis/label (defaults to the back-compat "Issue Date"). */
 function dateHeader(opts?: CsvOptions): string {
-  return (opts?.dateLabel && opts.dateLabel.trim()) ? opts.dateLabel.trim() : 'Issue Date';
+  const basis = normalizeBasis(opts?.dateBasis || 'issued');
+  if (basis === 'unknown') return DEFAULT_DATE_LABEL.unknown;
+  return (opts?.dateLabel && opts.dateLabel.trim()) ? opts.dateLabel.trim() : basis === 'opened' ? DEFAULT_DATE_LABEL.opened : 'Issue Date';
 }
 
 /** Serialize authorized/filtered permit rows to CSV text (UTF-8, CRLF). Pure. The date column

@@ -441,14 +441,14 @@ export default function Dashboard() {
   // Default ('') preserves the current server-returned order. Pure; never mutates/​fetches.
   const displayedPermits = sortPermits(tradeFilteredPermits, sortOption);
   const permitDateLabel = coverage ? coverageDateLabel(coverage) : 'Date';
-  const permitDateBasis = coverage?.date_basis;
+  const permitDateBasis = coverage?.date_basis ?? 'unknown';
 
   // Export exactly the currently-visible (filtered + sorted + entitlement-authorized) rows. CSV
   // serialization is pure (lib/csv); only the browser download trigger lives here. Never
   // fetches or introduces additional records.
   const exportCsv = () => {
     if (displayedPermits.length === 0) return;
-    const csv = buildPermitCsv(displayedPermits, coverage ? { dateBasis: coverage.date_basis, dateLabel: coverage.date_label } : undefined);
+    const csv = buildPermitCsv(displayedPermits, { dateBasis: permitDateBasis, dateLabel: coverage?.date_label ?? undefined });
     const filename = createExportFilename(
       { county, trade: tradeFilter, keyword: search },
       new Date().toISOString().slice(0, 10),
